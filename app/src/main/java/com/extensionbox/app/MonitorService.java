@@ -35,7 +35,6 @@ public class MonitorService extends Service {
     private Handler handler;
     private Runnable tickRunnable;
 
-    // Static data holder for Dashboard (Sprint 3)
     private static final Map<String, LinkedHashMap<String, String>> moduleData = new HashMap<>();
 
     public static LinkedHashMap<String, String> getModuleData(String key) {
@@ -51,12 +50,15 @@ public class MonitorService extends Service {
         super.onCreate();
         createChannels();
 
-        // Must call startForeground quickly to avoid ANR
+        sysAccess = new SystemAccess(this);
+        modules = new ArrayList<>();
+        modules.add(new BatteryModule());
+        modules.add(new NetworkModule());
+        modules.add(new UnlockModule());
+        lastTickTime = new HashMap<>();
+
         startForeground(NOTIF_ID, buildNotification());
 
-        sysAccess = new SystemAccess(this);
-        initModules();
-        lastTickTime = new HashMap<>();
         syncModules();
 
         handler = new Handler(Looper.getMainLooper());
@@ -93,16 +95,8 @@ public class MonitorService extends Service {
     @Override
     public IBinder onBind(Intent i) { return null; }
 
-    // ── Module lifecycle ──
-
-    private void initModules() {
-        modules = new ArrayList<>();
-        modules.add(new BatteryModule());
-        modules.add(new NetworkModule());
-        modules.add(new UnlockModule());
-    }
-
     private void syncModules() {
+        if (modules == null) return;
         for (Module m : modules) {
             boolean shouldRun = Prefs.isModuleEnabled(this, m.key(), m.defaultEnabled());
             if (shouldRun && !m.alive()) {
@@ -143,6 +137,11 @@ public class MonitorService extends Service {
     }
 
     private void scheduleNextTick() {
+        if (modules == null) {
+            handler.postDelayed(tickRunnable, 5000);
+            return;
+        }
+
         long now = SystemClock.elapsedRealtime();
         long minDelay = Long.MAX_VALUE;
 
@@ -155,11 +154,8 @@ public class MonitorService extends Service {
             if (delay < minDelay) minDelay = delay;
         }
 
-        // Clamp between 1s and 60s
         if (minDelay < 1000) minDelay = 1000;
         if (minDelay > 60000) minDelay = 60000;
-
-        // If no modules alive, check every 5s for module changes
         if (minDelay == Long.MAX_VALUE) minDelay = 5000;
 
         handler.postDelayed(tickRunnable, minDelay);
@@ -172,8 +168,6 @@ public class MonitorService extends Service {
         }
         moduleData.clear();
     }
-
-    // ── Notification ──
 
     private void createChannels() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -188,7 +182,7 @@ public class MonitorService extends Service {
 
         NotificationChannel alertCh = new NotificationChannel(
                 ALERT_CH, "Extension Box Alerts", NotificationManager.IMPORTANCE_HIGH);
-        alertCh.setDescription("Important alerts: battery low, limits reached");
+        alertCh.setDescription("Important alerts");
         nm.createNotificationChannel(alertCh);
     }
 
@@ -222,6 +216,7 @@ public class MonitorService extends Service {
     }
 
     private String buildTitle() {
+        if (modules == null) return "Extension Box";
         for (Module m : modules) {
             if (m.key().equals("battery") && m.alive()) {
                 if (m instanceof BatteryModule) {
@@ -233,6 +228,7 @@ public class MonitorService extends Service {
     }
 
     private String buildCompact() {
+        if (modules == null) return "Starting...";
         List<String> parts = new ArrayList<>();
         for (Module m : modules) {
             if (!m.alive()) continue;
@@ -244,6 +240,7 @@ public class MonitorService extends Service {
     }
 
     private String buildExpanded() {
+        if (modules == null) return "Starting...";
         List<String> lines = new ArrayList<>();
         for (Module m : modules) {
             if (!m.alive()) continue;
