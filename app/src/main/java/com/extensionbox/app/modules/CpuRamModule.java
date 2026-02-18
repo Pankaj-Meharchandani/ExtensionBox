@@ -17,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 
 public class CpuRamModule implements Module {
-
     private Context ctx;
     private boolean running = false;
 

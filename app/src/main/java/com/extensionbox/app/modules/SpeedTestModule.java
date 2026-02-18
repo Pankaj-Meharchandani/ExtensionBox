@@ -70,9 +70,7 @@ public class SpeedTestModule implements Module {
 
     @Override public void tick() { }
 
-    public void runTestNow() {
-        runTest();
-    }
+    public void runTestNow() { runTest(); }
 
     private void runTest() {
         if (ctx == null) return;

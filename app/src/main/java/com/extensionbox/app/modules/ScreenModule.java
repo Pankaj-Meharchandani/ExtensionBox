@@ -20,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 
 public class ScreenModule implements Module {
-
     private Context ctx;
     private BroadcastReceiver rcv;
     private boolean running = false;
