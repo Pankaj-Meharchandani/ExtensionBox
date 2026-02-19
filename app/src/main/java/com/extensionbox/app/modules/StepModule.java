@@ -5,6 +5,7 @@ import androidx.core.content.ContextCompat;
 import android.content.pm.PackageManager;
 import android.Manifest;
 import android.content.Context;
+import android.os.Build;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,6 +27,7 @@ public class StepModule implements Module, SensorEventListener {
     private Context ctx;
     private SensorManager sm;
     private boolean running = false;
+        permMissing = false;
     private float lastRaw = -1;
     private long dailySteps;
     private boolean sensorAvailable = true;
@@ -45,6 +47,12 @@ public class StepModule implements Module, SensorEventListener {
     @Override
     public void start(Context c, SystemAccess sys) {
         ctx = c;
+
+        permMissing = false;
+        if (Build.VERSION.SDK_INT >= 29) {
+            permMissing = ContextCompat.checkSelfPermission(c, Manifest.permission.ACTIVITY_RECOGNITION)
+                    != PackageManager.PERMISSION_GRANTED;
+        }
         dailySteps = Prefs.getLong(c, "stp_today", 0);
         sm = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
         Sensor s = sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
