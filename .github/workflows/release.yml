@@ -23,9 +23,8 @@ jobs:
 
       - name: Decode keystore
         run: |
-          mkdir -p app
-          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > app/release.jks
-          ls -lh app/release.jks
+          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > release.jks
+          ls -lh release.jks
 
       - name: Build Release APK
         env:
