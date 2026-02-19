@@ -26,8 +26,6 @@
                 android:layout_height="match_parent"
                 android:padding="20dp"
                 android:src="@drawable/ic_about_logo"
-        android:tint="?attr/colorPrimary"
-        android:tintMode="src_in"
                 android:contentDescription="Extension Box icon" />
         </com.google.android.material.card.MaterialCardView>
 
