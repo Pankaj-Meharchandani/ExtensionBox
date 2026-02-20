@@ -21,22 +21,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > release.jks
-          ls -lh release.jks
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Build Release APK
-        env:
-          KEYSTORE_PATH: release.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease
+        run: gradle :app:assembleRelease
 
       - name: Rename APK
-        run: |
-          cp app/build/outputs/apk/release/app-release.apk ExtensionBox-${{ github.ref_name }}.apk
+        run: cp app/build/outputs/apk/release/app-release.apk ExtensionBox-${{ github.ref_name }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
