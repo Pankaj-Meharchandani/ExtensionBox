@@ -8,10 +8,20 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
 import com.extensionbox.app.BuildConfig;
 import com.extensionbox.app.R;
+import com.extensionbox.app.network.GitHubService;
+import com.extensionbox.app.network.Release;
+import com.extensionbox.app.network.UpdateChecker;
+
+import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class AboutFragment extends Fragment {
 
@@ -56,6 +66,45 @@ public class AboutFragment extends Fragment {
             });
         }
 
+        checkForUpdates();
+
         return v;
+    }
+
+    private void checkForUpdates() {
+        GitHubService service = UpdateChecker.getGitHubService();
+        Call<List<Release>> call = service.getReleases("omersusin", "ExtensionBox");
+
+        call.enqueue(new Callback<List<Release>>() {
+            @Override
+            public void onResponse(Call<List<Release>> call, Response<List<Release>> response) {
+                if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
+                    Release latestRelease = response.body().get(0);
+                    String latestVersion = latestRelease.getTagName();
+                    String currentVersion = "v" + BuildConfig.VERSION_NAME;
+
+                    if (!latestVersion.equals(currentVersion)) {
+                        showUpdateDialog(latestVersion);
+                    }
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<Release>> call, Throwable t) {
+                // Handle failure
+            }
+        });
+    }
+
+    private void showUpdateDialog(String latestVersion) {
+        new AlertDialog.Builder(getContext())
+                .setTitle("Update Available")
+                .setMessage("A new version (" + latestVersion + ") is available. Would you like to update?")
+                .setPositiveButton("Update", (dialog, which) -> {
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/omersusin/ExtensionBox/releases/latest"));
+                    startActivity(browserIntent);
+                })
+                .setNegativeButton("Later", null)
+                .show();
     }
 }
