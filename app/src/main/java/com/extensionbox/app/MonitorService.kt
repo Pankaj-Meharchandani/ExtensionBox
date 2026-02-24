@@ -41,6 +41,7 @@ class MonitorService : Service() {
     private lateinit var database: AppDatabase
     private var initialized = false
     private val lastTickTime = ConcurrentHashMap<String, Long>()
+    private var lastNotifUpdateTime: Long = 0L
     private var nightSummarySent = false
     private var isScreenOn = true
 
@@ -53,6 +54,7 @@ class MonitorService : Service() {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_ON -> {
                     isScreenOn = true
+                    lastNotifUpdateTime = 0L // Force update on screen on
                     if (initialized) startTicker() // Immediate refresh on wake
                 }
                 Intent.ACTION_SCREEN_OFF -> {
@@ -123,6 +125,7 @@ class MonitorService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -225,7 +228,10 @@ class MonitorService : Service() {
                 changed = true
             }
         }
-        if (changed) {
+        
+        val notifInterval = Prefs.getLong(this@MonitorService, "notif_refresh_ms", 10000L)
+        if (changed && (now - lastNotifUpdateTime >= notifInterval)) {
+            lastNotifUpdateTime = now
             withContext(Dispatchers.Main) {
                 updateNotification()
             }
@@ -341,6 +347,7 @@ class MonitorService : Service() {
         val stopIntent = Intent(this, MonitorService::class.java).setAction(ACTION_STOP)
         val stopPi = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+        val isDismissible = Prefs.getBool(this, "notif_dismissible", false)
         val bigText = NotificationCompat.BigTextStyle().bigText(buildExpanded())
 
         return NotificationCompat.Builder(this, MONITOR_CH)
@@ -348,7 +355,8 @@ class MonitorService : Service() {
             .setContentTitle(buildTitle())
             .setContentText(buildCompact())
             .setStyle(bigText)
-            .setOngoing(true)
+            .setOngoing(!isDismissible)
+            .setDeleteIntent(if (isDismissible) stopPi else null)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
@@ -395,28 +403,43 @@ class MonitorService : Service() {
 
     private fun buildExpanded(): String {
         if (!::modules.isInitialized) return "Starting..."
-        val compactStyle = Prefs.getBool(this, "notif_compact_style", true)
-        val showAll = Prefs.getBool(this, "notif_show_all", false)
+        val layoutStyle = Prefs.getString(this, "notif_layout_style", "LIST") ?: "LIST"
         val alive = getAliveModulesSorted()
         
-        val allLines = if (compactStyle) {
-            alive.mapNotNull { m -> 
-                val c = m.compact()
-                if (c.isNotEmpty()) "• ${m.name()}: $c" else null 
+        if (alive.isEmpty()) return "Enable extensions from the app"
+
+        return when (layoutStyle) {
+            "GRID" -> {
+                val lines = mutableListOf<String>()
+                for (i in alive.indices step 2) {
+                    val m1 = alive[i]
+                    val m2 = if (i + 1 < alive.size) alive[i + 1] else null
+                    if (m2 != null) {
+                        lines.add("• ${m1.name().take(8)}: ${m1.compact()} | ${m2.name().take(8)}: ${m2.compact()}")
+                    } else {
+                        lines.add("• ${m1.name()}: ${m1.compact()}")
+                    }
+                }
+                lines.joinToString("\n")
             }
-        } else {
-            alive.mapNotNull { m -> m.detail().takeIf { it.isNotEmpty() } }
+            "COMPACT" -> {
+                alive.joinToString("  •  ") { m -> m.compact() }
+            }
+            else -> { // LIST
+                val compactStyle = Prefs.getBool(this, "notif_compact_style", true)
+                val lines = if (compactStyle) {
+                    alive.map { m -> "• ${m.name()}: ${m.compact()}" }
+                } else {
+                    alive.map { m -> m.detail() }
+                }
+                lines.joinToString("\n")
+            }
         }
-        
-        val maxItems = if (showAll) allLines.size else Prefs.getInt(this, "notif_compact_items", 4)
-        val lines = allLines.take(maxItems)
-        
-        return if (lines.isEmpty()) "Enable extensions from the app" else lines.joinToString("\n")
     }
 
     private fun getAliveModulesSorted(): List<Module> {
         if (!::modules.isInitialized) return emptyList()
-        val alive = modules.filter { it.alive() }
+        val alive = modules.filter { it.alive() && Prefs.isModuleVisibleInNotif(this, it.key()) }
         val saved = Prefs.getString(this, "dash_card_order", "") ?: ""
         if (saved.isEmpty()) {
             return alive.sortedBy { it.priority() }

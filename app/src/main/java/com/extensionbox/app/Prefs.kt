@@ -91,6 +91,16 @@ object Prefs {
         }
     }
 
+    fun isModuleVisibleInNotif(c: Context, key: String): Boolean = runBlocking {
+        val prefKey = booleanPreferencesKey("notif_m_${key}_visible")
+        c.dataStore.data.map { it[prefKey] ?: true }.first()
+    }
+
+    fun setModuleVisibleInNotif(c: Context, key: String, value: Boolean) = runBlocking {
+        val prefKey = booleanPreferencesKey("notif_m_${key}_visible")
+        c.dataStore.edit { it[prefKey] = value }
+    }
+
     fun getAll(c: Context): Map<String, *> = runBlocking {
         c.dataStore.data.first().asMap().mapKeys { it.key.name }
     }
