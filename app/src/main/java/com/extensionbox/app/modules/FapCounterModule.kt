@@ -138,6 +138,7 @@ class FapCounterModule : Module {
 
         if (today >= dailyLimit && !alertFired) {
             fireAlert(ctx, 2010, "🍆 Daily Limit Reached", "You've reached your daily limit of $dailyLimit. Take a break!")
+            vibrate(ctx, longArrayOf(0, 200, 100, 200)) // Feedback pulse
             Prefs.setBool(ctx, "fap_limit_fired", true)
         }
 

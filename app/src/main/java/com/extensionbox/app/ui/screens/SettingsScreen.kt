@@ -469,6 +469,39 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         // --- Data Section ---
         SettingsGroup(title = "Data & Backup", icon = Icons.Default.Storage) {
             AppCard {
+                var retentionDays by remember { mutableStateOf(Prefs.getDataRetentionDays(context).toFloat()) }
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Data Retention", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "${retentionDays.toInt()} Days",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Slider(
+                        value = retentionDays,
+                        onValueChange = { 
+                            retentionDays = it
+                            Prefs.setDataRetentionDays(context, it.toInt())
+                        },
+                        valueRange = 1f..30f,
+                        steps = 29
+                    )
+                    Text(
+                        text = "History older than this will be deleted daily.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
                 SettingsItem(
                     title = "Export Settings",
                     summary = "Save config to JSON",

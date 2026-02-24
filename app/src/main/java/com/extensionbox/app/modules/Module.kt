@@ -26,4 +26,17 @@ interface Module {
      * Battery=10, Screen=20, Sleep=30, Network=40, Data=50, Unlock=60, Steps=70, SpeedTest=80, etc.
      */
     fun priority(): Int
+
+    fun vibrate(ctx: android.content.Context, pattern: LongArray = longArrayOf(0, 100)) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vm = ctx.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
+                vm.defaultVibrator.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                @Suppress("DEPRECATION")
+                val v = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+                v.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+            }
+        } catch (ignored: Exception) {}
+    }
 }

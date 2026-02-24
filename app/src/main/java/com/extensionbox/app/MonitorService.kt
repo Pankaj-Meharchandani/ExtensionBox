@@ -266,9 +266,15 @@ class MonitorService : Service() {
             Prefs.setInt(this, "rollover_day", today)
             Prefs.setInt(this, "rollover_year", thisYear)
 
-            // Keep only 24 hours of data
-            serviceScope.launch(Dispatchers.IO) {
-                database.moduleDataDao().clearOldData(System.currentTimeMillis() - (24 * 60 * 60 * 1000))
+            // Database Pruning & Maintenance (#20)
+            val lastPruneDay = Prefs.getInt(this, "db_last_prune_day", -1)
+            if (lastPruneDay != today) {
+                serviceScope.launch(Dispatchers.IO) {
+                    val days = Prefs.getDataRetentionDays(this@MonitorService)
+                    val before = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
+                    database.moduleDataDao().clearOldData(before)
+                    Prefs.setInt(this@MonitorService, "db_last_prune_day", today)
+                }
             }
         }
 

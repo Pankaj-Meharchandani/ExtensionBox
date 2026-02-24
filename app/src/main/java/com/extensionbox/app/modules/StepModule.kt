@@ -199,6 +199,7 @@ class StepModule : Module, SensorEventListener {
                     .setAutoCancel(true).build())
             } catch (ignored: Exception) {
             }
+            vibrate(ctx, longArrayOf(0, 150, 50, 150, 50, 300)) // Triple celebratory pulse
             Prefs.setBool(ctx, "stp_goal_fired", true)
         }
     }

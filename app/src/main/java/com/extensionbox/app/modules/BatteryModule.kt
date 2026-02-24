@@ -173,6 +173,7 @@ class BatteryModule : Module {
 
         if (lowEnabled && level <= lowThresh && !lowFired && !isCharging()) {
             fireAlert(ctx, 2001, "🔴 Battery Low", "Battery at $level%. Charge your phone!")
+            vibrate(ctx, longArrayOf(0, 300, 100, 300)) // Warning double pulse
             Prefs.setBool(ctx, "bat_low_fired", true)
         }
         if (lowFired && level > lowThresh + 5) {
@@ -186,6 +187,7 @@ class BatteryModule : Module {
 
         if (tempEnabled && currentTemp >= tempThresh.toFloat() && !tempFired) {
             fireAlert(ctx, 2002, "🔴 High Temperature", "Battery at ${Fmt.temp(currentTemp)}. Let your phone cool down!")
+            vibrate(ctx, longArrayOf(0, 500, 200, 500)) // Stronger warning pulse
             Prefs.setBool(ctx, "bat_temp_fired", true)
         }
         if (tempFired && currentTemp < tempThresh - 3) {

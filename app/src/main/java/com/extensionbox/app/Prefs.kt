@@ -43,6 +43,16 @@ object Prefs {
         c.dataStore.edit { it[prefKey] = value }
     }
 
+    fun getDataRetentionDays(c: Context): Int = runBlocking {
+        val prefKey = intPreferencesKey("data_retention_days")
+        c.dataStore.data.map { it[prefKey] ?: 7 }.first() // Default to 7 days
+    }
+
+    fun setDataRetentionDays(c: Context, value: Int) = runBlocking {
+        val prefKey = intPreferencesKey("data_retention_days")
+        c.dataStore.edit { it[prefKey] = value }
+    }
+
     fun getInt(c: Context, key: String, def: Int): Int = runBlocking {
         val prefKey = intPreferencesKey(key)
         c.dataStore.data.map { it[prefKey] ?: def }.first()
