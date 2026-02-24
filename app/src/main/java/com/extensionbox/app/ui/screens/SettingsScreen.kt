@@ -3,12 +3,10 @@ package com.extensionbox.app.ui.screens
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -356,7 +354,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     }
                 }
 
-                if (themeIndex == ThemeHelper.MONET && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                    (themeIndex == ThemeHelper.MONET || themeIndex == ThemeHelper.AMOLED)) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     
                     var dynamicColor by remember { mutableStateOf(Prefs.getBool(context, "dynamic_color", true)) }

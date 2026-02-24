@@ -13,7 +13,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -68,9 +67,7 @@ private val NordColorScheme = darkColorScheme(
     surfaceVariant = Color(0xFF4C566A)
 )
 
-private val AmoledColorScheme = darkColorScheme(
-    primary = Color(0xFFBB86FC),
-    secondary = Color(0xFF03DAC6),
+private val AmoledOverrides = darkColorScheme(
     tertiary = Color(0xFFCF6679),
     surface = Color(0xFF000000),
     background = Color(0xFF000000),
@@ -123,7 +120,23 @@ fun ExtensionBoxTheme(
         ThemeHelper.GRUVBOX -> GruvboxColorScheme
         ThemeHelper.CATPPUCCIN -> CatppuccinColorScheme
         ThemeHelper.NORD -> NordColorScheme
-        ThemeHelper.AMOLED -> AmoledColorScheme
+        ThemeHelper.AMOLED -> {
+            val base = if (isDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dynamicDarkColorScheme(context)
+            } else {
+                DarkColorScheme
+            }
+            base.copy(
+                primary = base.primary,
+                secondary = base.secondary,
+                surface = AmoledOverrides.surface,
+                background = AmoledOverrides.background,
+                surfaceVariant = AmoledOverrides.surfaceVariant,
+                onSurface = AmoledOverrides.onSurface,
+                onBackground = AmoledOverrides.onBackground,
+                tertiary = AmoledOverrides.tertiary
+            )
+        }
         ThemeHelper.SOLARIZED -> SolarizedColorScheme
         ThemeHelper.DRACULA -> DraculaColorScheme
         else -> if (darkTheme) DarkColorScheme else LightColorScheme
