@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.extensionbox.app.MonitorService
 import com.extensionbox.app.Prefs
+import com.extensionbox.app.R
 import com.extensionbox.app.db.ModuleDataEntity
 import com.extensionbox.app.ui.ModuleRegistry
 import com.extensionbox.app.ui.components.Sparkline
@@ -76,7 +78,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Engine is offline.\nTap the pulse to start.",
+                            text = stringResource(id = R.string.engine_offline),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -88,7 +90,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                     val data = dashData[key]
                     if (data != null) {
                         ReorderableItem(reorderableState, key = key) { isDragging ->
-                            val elevation by animateDpAsState(if (isDragging) 12.dp else 0.dp, label = "elevation")
+                            val elevation by animateDpAsState(if (isDragging) 12.dp else 0.dp, label = stringResource(id = R.string.elevation))
                             
                             KernelCard(
                                 key = key,
@@ -134,13 +136,13 @@ fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, 
             ) {
                 Column {
                     Text(
-                        text = if (isRunning) "System Pulse" else "System Idle",
+                        text = if (isRunning) stringResource(id = R.string.system_pulse) else stringResource(id = R.string.system_idle),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (isRunning) "All systems operational" else "Engine paused",
+                        text = if (isRunning) stringResource(id = R.string.all_systems_operational) else stringResource(id = R.string.engine_paused),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -191,9 +193,9 @@ fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, 
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                PulseIndicator(label = "Battery", value = "$battery%", progress = battery / 100f, color = MaterialTheme.colorScheme.primary)
-                PulseIndicator(label = "CPU Load", value = "$cpu%", progress = cpu / 100f, color = MaterialTheme.colorScheme.secondary)
-                PulseIndicator(label = "Thermal", value = temp, progress = 0.4f, color = MaterialTheme.colorScheme.tertiary)
+                PulseIndicator(label = stringResource(id = R.string.battery), value = "$battery%", progress = battery / 100f, color = MaterialTheme.colorScheme.primary)
+                PulseIndicator(label = stringResource(id = R.string.cpu_load), value = "$cpu%", progress = cpu / 100f, color = MaterialTheme.colorScheme.secondary)
+                PulseIndicator(label = stringResource(id = R.string.thermal), value = temp, progress = 0.4f, color = MaterialTheme.colorScheme.tertiary)
             }
         }
     }
@@ -283,7 +285,7 @@ fun KernelCard(
 
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Details",
+                    contentDescription = stringResource(id = R.string.details),
                     modifier = Modifier.padding(start = 8.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
