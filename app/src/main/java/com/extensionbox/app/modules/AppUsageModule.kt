@@ -7,9 +7,11 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.extensionbox.app.Fmt
 import com.extensionbox.app.Prefs
+import com.extensionbox.app.R
 import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ui.components.SettingSlider
 import java.util.*
@@ -20,9 +22,9 @@ class AppUsageModule : Module {
     private var usageMap = mutableMapOf<String, Long>()
 
     override fun key(): String = "app_usage"
-    override fun name(): String = "App Usage"
+    override fun name(): String = ctx?.getString(R.string.app_usage_module_name) ?: "App Usage"
     override fun emoji(): String = "📱"
-    override fun description(): String = "Time spent in each application"
+    override fun description(): String = ctx?.getString(R.string.app_usage_module_description) ?: "Time spent in each application"
     override fun defaultEnabled(): Boolean = true
     override fun alive(): Boolean = running
     override fun priority(): Int = 22
@@ -63,18 +65,20 @@ class AppUsageModule : Module {
     }
 
     override fun compact(): String {
+        val c = ctx ?: return ""
         val top = usageMap.maxByOrNull { it.value }
-        return if (top != null) "Top: ${top.key} (${Fmt.duration(top.value)})" else "No usage data"
+        return if (top != null) c.getString(R.string.app_usage_module_compact_text, top.key, Fmt.duration(top.value)) else c.getString(R.string.app_usage_module_no_usage_data)
     }
 
     override fun detail(): String {
+        val c = ctx ?: return ""
         val sb = StringBuilder()
-        sb.append("📱 Today's App Usage:\n")
+        sb.append(c.getString(R.string.app_usage_module_todays_app_usage))
         if (usageMap.isEmpty()) {
-            sb.append("   No data. Ensure Usage Access is granted.\n")
+            sb.append(c.getString(R.string.app_usage_module_no_data_permission))
         } else {
             usageMap.toList().sortedByDescending { it.second }.forEach { (name, time) ->
-                sb.append("   • ${name.padEnd(16)} ${Fmt.duration(time)}\n")
+                sb.append(c.getString(R.string.app_usage_module_usage_line, name.padEnd(16), Fmt.duration(time)))
             }
         }
         return sb.toString()
@@ -94,14 +98,14 @@ class AppUsageModule : Module {
     override fun settingsContent(ctx: android.content.Context, sys: com.extensionbox.app.SystemAccess) {
         var interval by remember { mutableStateOf(Prefs.getInt(ctx, "usage_interval", 30000).toFloat()) }
         SettingSlider(
-            label = "Update Interval",
+            label = ctx.getString(R.string.app_usage_module_update_interval),
             value = interval,
             onValueChange = {
                 interval = it
                 Prefs.setInt(ctx, "usage_interval", it.toInt())
             },
             valueRange = 10000f..300000f,
-            formatter = { if (it >= 60000f) "${it.toInt() / 60000}m" else "${it.toInt() / 1000}s" }
+            formatter = { if (it >= 60000f) ctx.getString(R.string.app_usage_module_interval_formatter_minutes, it.toInt() / 60000) else ctx.getString(R.string.app_usage_module_interval_formatter_seconds, it.toInt() / 1000) }
         )
     }
 
@@ -114,16 +118,16 @@ class AppUsageModule : Module {
                 onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 },
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             ) {
-                androidx.compose.material3.Text("Grant Usage Access")
+                androidx.compose.material3.Text(ctx.getString(R.string.app_usage_module_grant_usage_access))
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 usageMap.toList().sortedByDescending { it.second }.take(5).forEach { (name, time) ->
-                    Row(modifier = androidx.compose.ui.Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        androidx.compose.material3.Text(name, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, modifier = androidx.compose.ui.Modifier.weight(1f))
-                        androidx.compose.material3.Text(Fmt.duration(time), style = androidx.compose.material3.MaterialTheme.typography.labelSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        androidx.compose.material3.Text(name, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Text(Fmt.duration(time), style = androidx.compose.material3.MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }
