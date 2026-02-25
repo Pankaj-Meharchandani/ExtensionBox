@@ -21,8 +21,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +39,8 @@ import com.extensionbox.app.MonitorService
 import com.extensionbox.app.Prefs
 import com.extensionbox.app.db.ModuleDataEntity
 import com.extensionbox.app.ui.ModuleRegistry
+import com.extensionbox.app.ui.components.Sparkline
+import com.extensionbox.app.ui.components.extractPoints
 import com.extensionbox.app.ui.viewmodel.DashboardViewModel
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
@@ -41,7 +48,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
+fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: (String) -> Unit = {}) {
     val context = LocalContext.current
     val isRunning by viewModel.isRunning.collectAsState()
     val activeCount by viewModel.activeCount.collectAsState()
@@ -87,8 +94,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
                                 key = key,
                                 data = data,
                                 history = historyData[key] ?: emptyList(),
-                                isExpanded = viewModel.isExpanded(key),
-                                onExpandToggle = { viewModel.toggleExpansion(key) },
+                                onClick = { onModuleClick(key) },
                                 reorderableItemScope = this,
                                 modifier = Modifier
                                     .graphicsLayer {
@@ -105,9 +111,14 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
 
 @Composable
 fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, Map<String, String>>, context: android.content.Context) {
-    val battery = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toIntOrNull() ?: 0
+    val battery = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
     val temp = dashData["battery"]?.get("battery.temp") ?: "--"
-    val cpu = dashData["cpu_ram"]?.get("cpu.usage")?.removeSuffix("%")?.toIntOrNull() ?: 0
+    val cpu = dashData["cpu"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
+
+    val rippleScope = rememberCoroutineScope()
+    val rippleScale = remember { Animatable(0f) }
+    val rippleAlpha = remember { Animatable(0f) }
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -135,26 +146,42 @@ fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, 
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                        if (isRunning) {
-                            val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
-                            context.startService(intent)
-                        } else {
-                            val intent = Intent(context, MonitorService::class.java)
-                            ContextCompat.startForegroundService(context, intent)
-                        }
-                    },
-                    modifier = Modifier.size(48.dp).background(
-                        if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.size(96.dp)) {
+                        val radius = size.minDimension / 2 * rippleScale.value
+                        drawCircle(
+                            color = primaryColor.copy(alpha = rippleAlpha.value),
+                            radius = radius,
+                            style = Stroke(width = 3.dp.toPx())
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (isRunning) {
+                                val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
+                                context.startService(intent)
+                            } else {
+                                val intent = Intent(context, MonitorService::class.java)
+                                ContextCompat.startForegroundService(context, intent)
+                            }
+                            rippleScope.launch {
+                                rippleScale.snapTo(0f)
+                                rippleAlpha.snapTo(0.8f)
+                                launch { rippleScale.animateTo(1.8f, tween(600, easing = FastOutSlowInEasing)) }
+                                rippleAlpha.animateTo(0f, tween(600, easing = FastOutSlowInEasing))
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).background(
+                            if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            CircleShape
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -178,7 +205,7 @@ fun PulseIndicator(label: String, value: String, progress: Float, color: Color) 
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
             CircularProgressIndicator(
                 progress = progress,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().rotate(-90f),
                 strokeWidth = 6.dp,
                 color = color,
                 trackColor = color.copy(alpha = 0.1f),
@@ -196,8 +223,7 @@ fun KernelCard(
     key: String, 
     data: Map<String, String>, 
     history: List<ModuleDataEntity>,
-    isExpanded: Boolean, 
-    onExpandToggle: () -> Unit,
+    onClick: () -> Unit,
     reorderableItemScope: ReorderableCollectionItemScope,
     modifier: Modifier = Modifier
 ) {
@@ -208,10 +234,9 @@ fun KernelCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onExpandToggle() },
+            .clickable { onClick() },
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-        border = if (isExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) else null
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -242,12 +267,10 @@ fun KernelCard(
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    if (!isExpanded) {
-                        Text(text = primaryValue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                    }
+                    Text(text = primaryValue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
                 }
 
-                if (history.isNotEmpty() && !isExpanded) {
+                if (history.isNotEmpty()) {
                     Box(modifier = Modifier.width(60.dp).height(30.dp)) {
                         Sparkline(
                             points = extractPoints(key, history),
@@ -259,116 +282,12 @@ fun KernelCard(
                 }
 
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Details",
                     modifier = Modifier.padding(start = 8.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            AnimatedVisibility(visible = isExpanded) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    if (history.isNotEmpty()) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().height(100.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        ) {
-                            Box(modifier = Modifier.padding(12.dp)) {
-                                Sparkline(
-                                    points = extractPoints(key, history),
-                                    modifier = Modifier.fillMaxSize(),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fillGradient = true
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(16.dp))
-                    }
-
-                    // Stats Grid
-                    val items = data.toList()
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items.chunked(2).forEach { rowItems ->
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                rowItems.forEach { pair ->
-                                    val label = pair.first.substringAfterLast('.').replace("_", " ").replaceFirstChar { it.uppercase() }
-                                    StatItem(label = label, value = pair.second, modifier = Modifier.weight(1f))
-                                }
-                                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-            }
         }
-    }
-}
-
-@Composable
-fun StatItem(label: String, value: String, modifier: Modifier) {
-    Column(modifier = modifier.padding(vertical = 4.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
-    return history.mapNotNull { entity ->
-        val raw = when (key) {
-            "battery" -> entity.data["battery.level"]?.removeSuffix("%")
-            "cpu_ram" -> entity.data["cpu.usage"]?.removeSuffix("%")
-            "network" -> entity.data["net.down_speed"]?.substringBefore(" ")
-            else -> null
-        }
-        raw?.toFloatOrNull()
-    }
-}
-
-@Composable
-fun Sparkline(
-    points: List<Float>,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    strokeWidth: androidx.compose.ui.unit.Dp = 2.dp,
-    fillGradient: Boolean = false
-) {
-    if (points.size < 2) return
-    val min = points.minOrNull() ?: 0f
-    val max = points.maxOrNull() ?: 1f
-    val range = if (max - min == 0f) 1f else max - min
-
-    Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-        val stepX = width / (points.size - 1)
-
-        val path = Path()
-        points.forEachIndexed { index, value ->
-            val x = index * stepX
-            val y = height - ((value - min) / range * height)
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-
-        if (fillGradient) {
-            val fillPath = Path().apply {
-                addPath(path)
-                lineTo(width, height)
-                lineTo(0f, height)
-                close()
-            }
-            drawPath(
-                path = fillPath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(color.copy(alpha = 0.3f), Color.Transparent)
-                )
-            )
-        }
-
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
     }
 }

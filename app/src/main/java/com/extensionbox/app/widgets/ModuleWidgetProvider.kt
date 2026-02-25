@@ -20,7 +20,8 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
 
     // Subclass aliases
     class BatteryWidgetProvider : ModuleWidgetProvider()
-    class CpuRamWidgetProvider : ModuleWidgetProvider()
+    class CpuWidgetProvider : ModuleWidgetProvider()
+    class RamWidgetProvider : ModuleWidgetProvider()
     class ScreenWidgetProvider : ModuleWidgetProvider()
     class SleepWidgetProvider : ModuleWidgetProvider()
     class NetworkWidgetProvider : ModuleWidgetProvider()
@@ -46,8 +47,9 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
             val name = cls.simpleName
             return when (name) {
                 "BatteryWidgetProvider" -> "battery"
-                "CpuRamWidgetProvider" -> "cpu_ram"
-                "ScreenWidgetProvider" -> "screen"
+                "CpuWidgetProvider" -> "cpu"
+                "RamWidgetProvider" -> "ram"
+                "ScreenWidgetProvider" -> "battery" // Screen merged into battery
                 "SleepWidgetProvider" -> "sleep"
                 "NetworkWidgetProvider" -> "network"
                 "DataWidgetProvider" -> "data"
@@ -135,7 +137,8 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
 
             val providers = arrayOf(
                 BatteryWidgetProvider::class.java,
-                CpuRamWidgetProvider::class.java,
+                CpuWidgetProvider::class.java,
+                RamWidgetProvider::class.java,
                 ScreenWidgetProvider::class.java,
                 SleepWidgetProvider::class.java,
                 NetworkWidgetProvider::class.java,

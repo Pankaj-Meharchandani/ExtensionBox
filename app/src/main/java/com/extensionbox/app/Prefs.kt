@@ -43,6 +43,16 @@ object Prefs {
         c.dataStore.edit { it[prefKey] = value }
     }
 
+    fun getDataRetentionDays(c: Context): Int = runBlocking {
+        val prefKey = intPreferencesKey("data_retention_days")
+        c.dataStore.data.map { it[prefKey] ?: 7 }.first() // Default to 7 days
+    }
+
+    fun setDataRetentionDays(c: Context, value: Int) = runBlocking {
+        val prefKey = intPreferencesKey("data_retention_days")
+        c.dataStore.edit { it[prefKey] = value }
+    }
+
     fun getInt(c: Context, key: String, def: Int): Int = runBlocking {
         val prefKey = intPreferencesKey(key)
         c.dataStore.data.map { it[prefKey] ?: def }.first()
@@ -89,6 +99,16 @@ object Prefs {
         c.dataStore.edit { 
             if (value == null) it.remove(prefKey) else it[prefKey] = value
         }
+    }
+
+    fun isModuleVisibleInNotif(c: Context, key: String): Boolean = runBlocking {
+        val prefKey = booleanPreferencesKey("notif_m_${key}_visible")
+        c.dataStore.data.map { it[prefKey] ?: true }.first()
+    }
+
+    fun setModuleVisibleInNotif(c: Context, key: String, value: Boolean) = runBlocking {
+        val prefKey = booleanPreferencesKey("notif_m_${key}_visible")
+        c.dataStore.edit { it[prefKey] = value }
     }
 
     fun getAll(c: Context): Map<String, *> = runBlocking {

@@ -36,7 +36,7 @@ object Fmt {
         }
     }
 
-    fun pct(p: Float): String = if (java.lang.Float.isNaN(p)) "—" else String.format(Locale.US, "%.1f%%", p)
+    fun percentage(p: Float): String = if (java.lang.Float.isNaN(p)) "—" else String.format(Locale.US, "%.1f%%", p)
 
     fun temp(celsius: Float): String = if (java.lang.Float.isNaN(celsius)) "—" else String.format(Locale.US, "%.1f°C", celsius)
 

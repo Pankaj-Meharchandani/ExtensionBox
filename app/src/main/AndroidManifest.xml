@@ -15,6 +15,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" xmlns:tools="http://schemas.android.com/tools" tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".ExtensionBoxApp"
@@ -55,7 +56,7 @@
         <!-- ═══ Module Widgets ═══ -->
         <receiver android:name=".widgets.ModuleWidgetProvider$BatteryWidgetProvider"
             android:exported="true"
-            android:label="🔋 Battery">
+            android:label="🔋 Battery &amp; Screen">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -63,9 +64,19 @@
                 android:resource="@xml/widget_battery_info" />
         </receiver>
 
-        <receiver android:name=".widgets.ModuleWidgetProvider$CpuRamWidgetProvider"
+        <receiver android:name=".widgets.ModuleWidgetProvider$CpuWidgetProvider"
             android:exported="true"
-            android:label="🧠 CPU &amp; RAM">
+            android:label="🧠 CPU">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cpuram_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.ModuleWidgetProvider$RamWidgetProvider"
+            android:exported="true"
+            android:label="🧠 RAM">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

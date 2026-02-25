@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -219,6 +220,118 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             }
         }
 
+        // --- Notification Section ---
+        SettingsGroup(title = "Notification", icon = Icons.Default.Notifications) {
+            AppCard {
+                var refreshRate by remember { mutableStateOf(Prefs.getLong(context, "notif_refresh_ms", 10000L).toFloat()) }
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Refresh Rate", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "${refreshRate.toInt() / 1000}s",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Slider(
+                        value = refreshRate,
+                        onValueChange = { 
+                            refreshRate = it
+                            Prefs.setLong(context, "notif_refresh_ms", it.toLong())
+                        },
+                        valueRange = 1000f..60000f,
+                        steps = 58
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                var dismissible by remember { mutableStateOf(Prefs.getBool(context, "notif_dismissible", false)) }
+                SettingsToggle(
+                    title = "Dismissible",
+                    summary = "Allow swiping away to stop service",
+                    icon = Icons.Default.Swipe,
+                    checked = dismissible,
+                    onCheckedChange = {
+                        dismissible = it
+                        Prefs.setBool(context, "notif_dismissible", it)
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                var layoutExpanded by remember { mutableStateOf(false) }
+                var layoutStyle by remember { mutableStateOf(Prefs.getString(context, "notif_layout_style", "LIST") ?: "LIST") }
+                
+                SettingsItem(
+                    title = "Layout Style",
+                    summary = layoutStyle,
+                    icon = Icons.Default.Dashboard,
+                    onClick = { layoutExpanded = true }
+                )
+                
+                DropdownMenu(expanded = layoutExpanded, onDismissRequest = { layoutExpanded = false }) {
+                    listOf("LIST", "GRID", "COMPACT").forEach { style ->
+                        DropdownMenuItem(
+                            text = { Text(style) },
+                            onClick = {
+                                layoutStyle = style
+                                Prefs.setString(context, "notif_layout_style", style)
+                                layoutExpanded = false
+                            }
+                        )
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                var modulesExpanded by remember { mutableStateOf(false) }
+                SettingsItem(
+                    title = "Visible Modules",
+                    summary = "Choose which stats appear in notification",
+                    icon = Icons.Default.List,
+                    onClick = { modulesExpanded = !modulesExpanded }
+                )
+
+                if (modulesExpanded) {
+                    Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
+                        for (i in 0 until com.extensionbox.app.ui.ModuleRegistry.count()) {
+                            val key = com.extensionbox.app.ui.ModuleRegistry.keyAt(i)
+                            val name = com.extensionbox.app.ui.ModuleRegistry.nameAt(i)
+                            var isVisible by remember { mutableStateOf(Prefs.isModuleVisibleInNotif(context, key)) }
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { 
+                                        isVisible = !isVisible
+                                        Prefs.setModuleVisibleInNotif(context, key, isVisible)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = name, style = MaterialTheme.typography.bodySmall)
+                                Checkbox(
+                                    checked = isVisible,
+                                    onCheckedChange = {
+                                        isVisible = it
+                                        Prefs.setModuleVisibleInNotif(context, key, it)
+                                    },
+                                    modifier = Modifier.scale(0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // --- Appearance Section ---
         SettingsGroup(title = "Appearance", icon = Icons.Default.Palette) {
             AppCard {
@@ -356,6 +469,39 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         // --- Data Section ---
         SettingsGroup(title = "Data & Backup", icon = Icons.Default.Storage) {
             AppCard {
+                var retentionDays by remember { mutableStateOf(Prefs.getDataRetentionDays(context).toFloat()) }
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Data Retention", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "${retentionDays.toInt()} Days",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Slider(
+                        value = retentionDays,
+                        onValueChange = { 
+                            retentionDays = it
+                            Prefs.setDataRetentionDays(context, it.toInt())
+                        },
+                        valueRange = 1f..30f,
+                        steps = 29
+                    )
+                    Text(
+                        text = "History older than this will be deleted daily.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
                 SettingsItem(
                     title = "Export Settings",
                     summary = "Save config to JSON",
