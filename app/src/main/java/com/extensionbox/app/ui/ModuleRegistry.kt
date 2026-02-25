@@ -19,7 +19,6 @@ object ModuleRegistry {
         ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "🔋", "Battery & Screen", "Battery health, power and screen usage", true),
         ModuleDef("cpu", Icons.Rounded.Memory, "🧠", "CPU", "CPU usage, frequency and temperature", true),
         ModuleDef("ram", Icons.Rounded.Memory, "🧠", "RAM", "Memory status and running processes", true),
-        ModuleDef("app_usage", Icons.Rounded.History, "📱", "App Usage", "Time spent in each application", true),
         ModuleDef("sleep", Icons.Rounded.Bedtime, "😴", "Deep Sleep", "CPU sleep vs awake ratio", true),
         ModuleDef("network", Icons.Rounded.NetworkCheck, "📶", "Network Speed", "Real-time download/upload speed", true),
         ModuleDef("data", Icons.Rounded.DataUsage, "📊", "Data Usage", "Daily & monthly, WiFi & mobile", true),

@@ -22,7 +22,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
     class BatteryWidgetProvider : ModuleWidgetProvider()
     class CpuWidgetProvider : ModuleWidgetProvider()
     class RamWidgetProvider : ModuleWidgetProvider()
-    class AppUsageWidgetProvider : ModuleWidgetProvider()
     class ScreenWidgetProvider : ModuleWidgetProvider()
     class SleepWidgetProvider : ModuleWidgetProvider()
     class NetworkWidgetProvider : ModuleWidgetProvider()
@@ -50,7 +49,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
                 "BatteryWidgetProvider" -> "battery"
                 "CpuWidgetProvider" -> "cpu"
                 "RamWidgetProvider" -> "ram"
-                "AppUsageWidgetProvider" -> "app_usage"
                 "ScreenWidgetProvider" -> "battery" // Screen merged into battery
                 "SleepWidgetProvider" -> "sleep"
                 "NetworkWidgetProvider" -> "network"
@@ -141,7 +139,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
                 BatteryWidgetProvider::class.java,
                 CpuWidgetProvider::class.java,
                 RamWidgetProvider::class.java,
-                AppUsageWidgetProvider::class.java,
                 ScreenWidgetProvider::class.java,
                 SleepWidgetProvider::class.java,
                 NetworkWidgetProvider::class.java,

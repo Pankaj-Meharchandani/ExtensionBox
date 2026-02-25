@@ -222,6 +222,15 @@ class BatteryModule : Module {
                     Prefs.setBool(ctx, "scr_show_drain", it)
                 }
             )
+            var useUsage by remember { mutableStateOf(Prefs.getBool(ctx, "m_app_usage_enabled", true)) }
+            SettingSwitch(
+                label = "Show App Usage",
+                checked = useUsage,
+                onCheckedChange = {
+                    useUsage = it
+                    Prefs.setBool(ctx, "m_app_usage_enabled", it)
+                }
+            )
             var timeLimit by remember { mutableStateOf(Prefs.getInt(ctx, "scr_time_limit", 0).toFloat()) }
             SettingSlider(
                 label = "Screen Time Limit",

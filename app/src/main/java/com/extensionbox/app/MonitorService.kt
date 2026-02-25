@@ -94,7 +94,6 @@ class MonitorService : Service() {
                 BatteryModule(),
                 CpuModule(),
                 RamModule(),
-                AppUsageModule(),
                 SleepModule(),
                 NetworkModule(),
                 DataUsageModule(),
