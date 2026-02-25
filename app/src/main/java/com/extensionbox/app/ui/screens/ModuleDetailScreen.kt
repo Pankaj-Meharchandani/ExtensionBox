@@ -130,8 +130,9 @@ fun ModuleDetailScreen(
                     // Common Refresh Interval
                     val intervalKey = when(moduleKey) {
                         "battery" -> "bat_interval"
-                        "cpu_ram" -> "cpu_interval"
-                        "screen" -> "scr_interval"
+                        "cpu" -> "cpu_interval"
+                        "ram" -> "ram_interval"
+                        "app_usage" -> "usage_interval"
                         "sleep" -> "slp_interval"
                         "network" -> "net_interval"
                         "data" -> "dat_interval"
@@ -209,8 +210,31 @@ fun ModuleDetailScreen(
                                     formatter = { "${it.toInt()}°C" }
                                 )
                             }
+                            
+                            // Screen settings merged here
+                            var showDrain by remember { mutableStateOf(Prefs.getBool(context, "scr_show_drain", true)) }
+                            SettingSwitch(
+                                label = "Show Screen Drain",
+                                checked = showDrain,
+                                onCheckedChange = {
+                                    showDrain = it
+                                    Prefs.setBool(context, "scr_show_drain", it)
+                                }
+                            )
+                            var timeLimit by remember { mutableStateOf(Prefs.getInt(context, "scr_time_limit", 0).toFloat()) }
+                            SettingSlider(
+                                label = "Screen Time Limit",
+                                value = timeLimit,
+                                valueRange = 0f..600f,
+                                steps = 12,
+                                onValueChange = {
+                                    timeLimit = it
+                                    Prefs.setInt(context, "scr_time_limit", it.toInt())
+                                },
+                                formatter = { if (it == 0f) "Disabled" else "${it.toInt()}m" }
+                            )
                         }
-                        "cpu_ram" -> {
+                        "ram" -> {
                             var ramAlert by remember { mutableStateOf(Prefs.getBool(context, "cpu_ram_alert", false)) }
                             SettingSwitch(
                                 label = "High RAM Alert",
@@ -233,38 +257,6 @@ fun ModuleDetailScreen(
                                     formatter = { "${it.toInt()}%" }
                                 )
                             }
-                        }
-                        "screen" -> {
-                            var showDrain by remember { mutableStateOf(Prefs.getBool(context, "scr_show_drain", true)) }
-                            SettingSwitch(
-                                label = "Show Drain Rates",
-                                checked = showDrain,
-                                onCheckedChange = {
-                                    showDrain = it
-                                    Prefs.setBool(context, "scr_show_drain", it)
-                                }
-                            )
-                            var showYesterday by remember { mutableStateOf(Prefs.getBool(context, "scr_show_yesterday", true)) }
-                            SettingSwitch(
-                                label = "Show Yesterday",
-                                checked = showYesterday,
-                                onCheckedChange = {
-                                    showYesterday = it
-                                    Prefs.setBool(context, "scr_show_yesterday", it)
-                                }
-                            )
-                            var timeLimit by remember { mutableStateOf(Prefs.getInt(context, "scr_time_limit", 0).toFloat()) }
-                            SettingSlider(
-                                label = "Daily Screen Time Limit",
-                                value = timeLimit,
-                                valueRange = 0f..600f,
-                                steps = 12,
-                                onValueChange = {
-                                    timeLimit = it
-                                    Prefs.setInt(context, "scr_time_limit", it.toInt())
-                                },
-                                formatter = { if (it == 0f) "Disabled" else "${it.toInt()}m" }
-                            )
                         }
                         "steps" -> {
                             var goal by remember { mutableStateOf(Prefs.getInt(context, "stp_goal", 10000).toFloat()) }

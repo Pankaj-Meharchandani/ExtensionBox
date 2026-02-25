@@ -83,12 +83,13 @@ fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
     return history.mapNotNull { entity ->
         when (key) {
             "battery"    -> entity.data["battery.level"]?.removeSuffix("%")?.toFloatOrNull()
-            "cpu_ram"    -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
-            "sleep"      -> entity.data["sleep.deep_pct"]?.removeSuffix("%")?.toFloatOrNull()
+            "cpu"        -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
+            "ram"        -> entity.data["ram.percentage"]?.removeSuffix("%")?.toFloatOrNull()
+            "sleep"      -> entity.data["sleep.deep_percentage"]?.removeSuffix("%")?.toFloatOrNull()
             "network"    -> entity.data["net.download"]?.let { parseSpeedToKbps(it) }
             "data"       -> entity.data["data.today_total"]?.let { parseBytesToKb(it) }
             "unlock"     -> entity.data["unlock.today"]?.toFloatOrNull()
-            "storage"    -> entity.data["storage.pct"]?.removeSuffix("%")?.toFloatOrNull()
+            "storage"    -> entity.data["storage.percentage"]?.removeSuffix("%")?.toFloatOrNull()
             "connection" -> entity.data["conn.rssi"]?.substringBefore(" ")?.toFloatOrNull()?.let { -it }
             "screen"     -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
             "uptime"     -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }

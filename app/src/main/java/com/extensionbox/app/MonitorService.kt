@@ -92,8 +92,9 @@ class MonitorService : Service() {
             
             modules = listOf(
                 BatteryModule(),
-                CpuRamModule(),
-                ScreenModule(),
+                CpuModule(),
+                RamModule(),
+                AppUsageModule(),
                 SleepModule(),
                 NetworkModule(),
                 DataUsageModule(),

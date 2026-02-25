@@ -372,8 +372,8 @@ class SystemAccess(ctx: Context) {
         return try {
             val powerProfileClass = Class.forName("com.android.internal.os.PowerProfile")
             val pp = powerProfileClass.getConstructor(Context::class.java).newInstance(ctx)
-            val cap = powerProfileClass.getMethod("getBatteryCapacity").invoke(pp) as Double
-            if (cap > 0) cap.toInt() else 4000
+            val capacity = powerProfileClass.getMethod("getBatteryCapacity").invoke(pp) as Double
+            if (capacity > 0) capacity.toInt() else 4000
         } catch (e: Exception) {
             4000
         }
@@ -427,7 +427,7 @@ class SystemAccess(ctx: Context) {
         return Float.NaN
     }
 
-    fun readRealHealthPct(ctx: Context): Int {
+    fun readRealHealthPercentage(ctx: Context): Int {
         val actualCap = readActualCapacity()
         val designCap = readDesignCapacity(ctx)
         if (actualCap <= 0 || designCap <= 0) return -1
@@ -486,6 +486,59 @@ class SystemAccess(ctx: Context) {
         } catch (ignored: Exception) {
             -1f
         }
+    }
+
+    fun getRunningProcesses(): List<Triple<String, String, String>> {
+        val cmd = "top -n 1 -b -m 10"
+        val output = if (rootAvailable) shell.exec(cmd) else {
+            try {
+                val p = Runtime.getRuntime().exec(cmd.split(" ").toTypedArray())
+                val br = BufferedReader(InputStreamReader(p.inputStream))
+                val sb = StringBuilder()
+                var line: String?
+                while (br.readLine().also { line = it } != null) {
+                    sb.append(line).append("\n")
+                }
+                sb.toString()
+            } catch (e: Exception) { "" }
+        }
+        
+        return parseTopProcesses(output ?: "")
+    }
+
+    private fun parseTopProcesses(output: String): List<Triple<String, String, String>> {
+        val list = mutableListOf<Triple<String, String, String>>()
+        try {
+            var foundHeader = false
+            output.lines().forEach { line ->
+                val l = line.trim()
+                if (l.contains("PID") && l.contains("NAME")) {
+                    foundHeader = true
+                    return@forEach
+                }
+                if (foundHeader && l.isNotEmpty()) {
+                    val parts = l.split(Regex("\\s+"))
+                    if (parts.size >= 12) {
+                        // Standard top output: PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ NAME
+                        val cpu = parts[8] + "%"
+                        val mem = parts[9] + "%"
+                        val name = parts[11]
+                        if (name != "top") {
+                            list.add(Triple(name, cpu, mem))
+                        }
+                    } else if (parts.size >= 9) {
+                        // Some versions have different columns
+                        val cpu = parts[parts.size - 4] + "%"
+                        val mem = parts[parts.size - 3] + "%"
+                        val name = parts.last()
+                        if (name != "top") {
+                            list.add(Triple(name, cpu, mem))
+                        }
+                    }
+                }
+            }
+        } catch (ignored: Exception) {}
+        return list.take(10)
     }
 
     fun getCpuCoreCount(): Int {

@@ -1,21 +1,19 @@
 package com.extensionbox.app.modules
 
-import android.app.ActivityManager
-import android.app.NotificationManager
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationCompat
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import com.extensionbox.app.Fmt
 import com.extensionbox.app.Prefs
-import com.extensionbox.app.R
 import com.extensionbox.app.SystemAccess
 import java.util.LinkedHashMap
 import java.util.Locale
 
-class CpuRamModule : Module {
+class CpuModule : Module {
     private var ctx: Context? = null
     private var sys: SystemAccess? = null
     private var running = false
@@ -23,20 +21,16 @@ class CpuRamModule : Module {
     private var prevCpuTimes: LongArray? = null
     private var cpuUsage = -1f
     private var cpuTemp = Float.NaN
-    private var ramUsed: Long = 0
-    private var ramTotal: Long = 0
-    private var ramAvail: Long = 0
     
-    // Advanced data
     private var coreFreqs = listOf<Long>()
     private var coreGovs = listOf<String>()
     private var gpuLoad = -1
     private var gpuFreq = 0L
 
-    override fun key(): String = "cpu_ram"
-    override fun name(): String = "CPU & RAM"
+    override fun key(): String = "cpu"
+    override fun name(): String = "CPU"
     override fun emoji(): String = "🧠"
-    override fun description(): String = "CPU usage, temperature, memory status"
+    override fun description(): String = "CPU usage, frequency and temperature"
     override fun defaultEnabled(): Boolean = true
     override fun alive(): Boolean = running
     override fun priority(): Int = 15
@@ -85,16 +79,6 @@ class CpuRamModule : Module {
             gpuLoad = gpu.first
             gpuFreq = gpu.second
         }
-
-        try {
-            val am = ctx?.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val mi = ActivityManager.MemoryInfo()
-            am.getMemoryInfo(mi)
-            ramTotal = mi.totalMem
-            ramAvail = mi.availMem
-            ramUsed = ramTotal - ramAvail
-        } catch (ignored: Exception) {
-        }
     }
 
     private fun calcCpuUsage(prev: LongArray?, curr: LongArray?): Float {
@@ -136,21 +120,19 @@ class CpuRamModule : Module {
     }
 
     override fun compact(): String {
-        val ramPct = if (ramTotal > 0) ramUsed * 100f / ramTotal else 0f
         val cpuStr = if (cpuUsage < 0f) "--" else "${cpuUsage.toInt()}%"
         val tempStr = if (!cpuTemp.isNaN()) " ${Fmt.temp(cpuTemp)}" else ""
-        return "CPU:$cpuStr$tempStr RAM:${ramPct.toInt()}%"
+        return "CPU: $cpuStr$tempStr"
     }
 
     override fun detail(): String {
-        val ramPct = if (ramTotal > 0) ramUsed * 100f / ramTotal else 0f
         val sb = StringBuilder()
         val cpuStr = if (cpuUsage < 0f) "--" else String.format(Locale.US, "%.1f%%", cpuUsage)
-        sb.append("🧠 CPU: $cpuStr")
+        sb.append("🧠 CPU Usage: $cpuStr")
         if (!cpuTemp.isNaN()) {
             sb.append(" • ${Fmt.temp(cpuTemp)}")
         }
-        sb.append("\n   RAM: ${Fmt.bytes(ramUsed)} / ${Fmt.bytes(ramTotal)} (${ramPct.toInt()}%)\n")
+        sb.append("\n")
         
         if (gpuLoad >= 0) {
             sb.append("   GPU: $gpuLoad%")
@@ -166,23 +148,17 @@ class CpuRamModule : Module {
             sb.append("\n")
         }
 
-        sb.append("   Available RAM: ${Fmt.bytes(ramAvail)}")
         return sb.toString()
     }
 
     override fun dataPoints(): LinkedHashMap<String, String> {
         val d = LinkedHashMap<String, String>()
-        val ramPct = if (ramTotal > 0) ramUsed * 100f / ramTotal else 0f
         d["cpu.usage"] = if (cpuUsage < 0f) "N/A" else String.format(Locale.US, "%.1f%%", cpuUsage)
-        d["cpu.temp"] = if (!cpuTemp.isNaN()) Fmt.temp(cpuTemp) else "—"
-        d["ram.used"] = Fmt.bytes(ramUsed)
-        d["ram.total"] = Fmt.bytes(ramTotal)
-        d["ram.available"] = Fmt.bytes(ramAvail)
-        d["ram.pct"] = "${ramPct.toInt()}%"
+        d["cpu.temperature"] = if (!cpuTemp.isNaN()) Fmt.temp(cpuTemp) else "—"
 
         if (gpuLoad >= 0) {
             d["gpu.load"] = "$gpuLoad%"
-            if (gpuFreq > 0) d["gpu.freq"] = "${gpuFreq / 1_000_000}MHz"
+            if (gpuFreq > 0) d["gpu.frequency"] = "${gpuFreq / 1_000_000}MHz"
         }
 
         coreFreqs.forEachIndexed { i, f ->
@@ -192,77 +168,32 @@ class CpuRamModule : Module {
         return d
     }
 
+    override fun checkAlerts(ctx: Context) {}
+
     @androidx.compose.runtime.Composable
     override fun settingsContent(ctx: android.content.Context, sys: com.extensionbox.app.SystemAccess) {
-        var interval by androidx.compose.runtime.remember { 
-            androidx.compose.runtime.mutableStateOf(com.extensionbox.app.Prefs.getInt(ctx, "cpu_interval", 5000).toFloat()) 
-        }
-        var alertOn by androidx.compose.runtime.remember { 
-            androidx.compose.runtime.mutableStateOf(com.extensionbox.app.Prefs.getBool(ctx, "cpu_ram_alert", false)) 
+        var interval by remember { 
+            mutableStateOf(Prefs.getInt(ctx, "cpu_interval", 5000).toFloat()) 
         }
 
-        androidx.compose.foundation.layout.Column {
-            androidx.compose.foundation.layout.Row(
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.material3.Text("Refresh Interval", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
-                androidx.compose.material3.Text("${interval.toInt()}ms", color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+                Text("Refresh Interval", style = MaterialTheme.typography.bodyMedium)
+                Text("${interval.toInt()}ms", color = MaterialTheme.colorScheme.primary)
             }
-            androidx.compose.material3.Slider(
+            Slider(
                 value = interval,
                 onValueChange = { 
                     interval = it
-                    com.extensionbox.app.Prefs.setInt(ctx, "cpu_interval", it.toInt())
+                    Prefs.setInt(ctx, "cpu_interval", it.toInt())
                 },
                 valueRange = 1000f..10000f,
                 steps = 8
             )
-
-            androidx.compose.material3.HorizontalDivider(modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp))
-
-            androidx.compose.foundation.layout.Row(
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
-            ) {
-                androidx.compose.foundation.layout.Column {
-                    androidx.compose.material3.Text("RAM Usage Alert", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
-                    androidx.compose.material3.Text("Notify when usage is high", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-                }
-                androidx.compose.material3.Switch(
-                    checked = alertOn,
-                    onCheckedChange = {
-                        alertOn = it
-                        com.extensionbox.app.Prefs.setBool(ctx, "cpu_ram_alert", it)
-                    }
-                )
-            }
-        }
-    }
-
-    override fun checkAlerts(ctx: Context) {
-        val alertOn = Prefs.getBool(ctx, "cpu_ram_alert", false)
-        val thresh = Prefs.getInt(ctx, "cpu_ram_thresh", 90)
-        val fired = Prefs.getBool(ctx, "cpu_ram_alert_fired", false)
-        val ramPct = if (ramTotal > 0) ramUsed * 100f / ramTotal else 0f
-
-        if (alertOn && ramPct >= thresh && !fired) {
-            try {
-                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                nm.notify(2003, NotificationCompat.Builder(ctx, "ebox_alerts")
-                    .setSmallIcon(R.drawable.ic_notif)
-                    .setContentTitle("🔴 High RAM Usage")
-                    .setContentText("RAM at ${ramPct.toInt()}%")
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setAutoCancel(true).build())
-            } catch (ignored: Exception) {
-            }
-            Prefs.setBool(ctx, "cpu_ram_alert_fired", true)
-        }
-        if (fired && ramPct < thresh - 5) {
-            Prefs.setBool(ctx, "cpu_ram_alert_fired", false)
         }
     }
 }

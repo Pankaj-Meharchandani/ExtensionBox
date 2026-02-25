@@ -113,7 +113,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
 fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, Map<String, String>>, context: android.content.Context) {
     val battery = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
     val temp = dashData["battery"]?.get("battery.temp") ?: "--"
-    val cpu = dashData["cpu_ram"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
+    val cpu = dashData["cpu"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
 
     val rippleScope = rememberCoroutineScope()
     val rippleScale = remember { Animatable(0f) }

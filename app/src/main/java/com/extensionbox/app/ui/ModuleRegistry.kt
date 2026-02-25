@@ -16,9 +16,10 @@ data class ModuleDef(
 object ModuleRegistry {
 
     private val MODULES = listOf(
-        ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "🔋", "Battery", "Current, power, temperature, health", true),
-        ModuleDef("cpu_ram", Icons.Rounded.Memory, "🧠", "CPU & RAM", "CPU usage, memory status", true),
-        ModuleDef("screen", Icons.Rounded.Smartphone, "📱", "Screen Time", "Screen on/off time, drain rates", true),
+        ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "🔋", "Battery & Screen", "Battery health, power and screen usage", true),
+        ModuleDef("cpu", Icons.Rounded.Memory, "🧠", "CPU", "CPU usage, frequency and temperature", true),
+        ModuleDef("ram", Icons.Rounded.Memory, "🧠", "RAM", "Memory status and running processes", true),
+        ModuleDef("app_usage", Icons.Rounded.History, "📱", "App Usage", "Time spent in each application", true),
         ModuleDef("sleep", Icons.Rounded.Bedtime, "😴", "Deep Sleep", "CPU sleep vs awake ratio", true),
         ModuleDef("network", Icons.Rounded.NetworkCheck, "📶", "Network Speed", "Real-time download/upload speed", true),
         ModuleDef("data", Icons.Rounded.DataUsage, "📊", "Data Usage", "Daily & monthly, WiFi & mobile", true),
@@ -54,8 +55,9 @@ object ModuleRegistry {
     fun getModule(key: String): com.extensionbox.app.modules.Module? {
         return when (key) {
             "battery" -> com.extensionbox.app.modules.BatteryModule()
-            "cpu_ram" -> com.extensionbox.app.modules.CpuRamModule()
-            "screen" -> com.extensionbox.app.modules.ScreenModule()
+            "cpu" -> com.extensionbox.app.modules.CpuModule()
+            "ram" -> com.extensionbox.app.modules.RamModule()
+            "app_usage" -> com.extensionbox.app.modules.AppUsageModule()
             "sleep" -> com.extensionbox.app.modules.SleepModule()
             "network" -> com.extensionbox.app.modules.NetworkModule()
             "data" -> com.extensionbox.app.modules.DataUsageModule()

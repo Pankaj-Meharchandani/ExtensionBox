@@ -104,7 +104,7 @@ class StorageModule : Module {
         d["storage.used"] = Fmt.bytes(intUsed)
         d["storage.free"] = Fmt.bytes(intFree)
         d["storage.total"] = Fmt.bytes(intTotal)
-        d["storage.pct"] = String.format(Locale.US, "%.1f%%", pct)
+        d["storage.percentage"] = String.format(Locale.US, "%.1f%%", pct)
         if (readSpeed > 0 || writeSpeed > 0) {
             d["storage.io_read"] = Fmt.speed(readSpeed)
             d["storage.io_write"] = Fmt.speed(writeSpeed)

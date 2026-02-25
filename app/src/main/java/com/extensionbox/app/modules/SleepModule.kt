@@ -64,9 +64,9 @@ class SleepModule : Module {
         val pct = deepPct()
         val d = LinkedHashMap<String, String>()
         d["sleep.deep_time"] = Fmt.duration(ds)
-        d["sleep.deep_pct"] = Fmt.pct(pct)
+        d["sleep.deep_percentage"] = Fmt.percentage(pct)
         d["sleep.awake_time"] = Fmt.duration(up)
-        d["sleep.awake_pct"] = Fmt.pct(100 - pct)
+        d["sleep.awake_percentage"] = Fmt.percentage(100 - pct)
         return d
     }
 
