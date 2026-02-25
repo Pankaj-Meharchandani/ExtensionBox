@@ -21,8 +21,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -105,9 +110,15 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
 
 @Composable
 fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, Map<String, String>>, context: android.content.Context) {
-    val battery = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toIntOrNull() ?: 0
+    val battery = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
     val temp = dashData["battery"]?.get("battery.temp") ?: "--"
-    val cpu = dashData["cpu_ram"]?.get("cpu.usage")?.removeSuffix("%")?.toIntOrNull() ?: 0
+    val cpu = dashData["cpu_ram"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
+
+    // Ripple state
+    val rippleScope = rememberCoroutineScope()
+    val rippleScale = remember { Animatable(0f) }
+    val rippleAlpha = remember { Animatable(0f) }
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -135,26 +146,45 @@ fun SystemPulseHero(isRunning: Boolean, activeCount: Int, dashData: Map<String, 
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                        if (isRunning) {
-                            val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
-                            context.startService(intent)
-                        } else {
-                            val intent = Intent(context, MonitorService::class.java)
-                            ContextCompat.startForegroundService(context, intent)
-                        }
-                    },
-                    modifier = Modifier.size(48.dp).background(
-                        if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // Play/Pause button with ripple
+                Box(contentAlignment = Alignment.Center) {
+                    // Ripple canvas behind the button
+                    Canvas(modifier = Modifier.size(96.dp)) {
+                        val radius = size.minDimension / 2 * rippleScale.value
+                        drawCircle(
+                            color = primaryColor.copy(alpha = rippleAlpha.value),
+                            radius = radius,
+                            style = Stroke(width = 3.dp.toPx())
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (isRunning) {
+                                val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
+                                context.startService(intent)
+                            } else {
+                                val intent = Intent(context, MonitorService::class.java)
+                                ContextCompat.startForegroundService(context, intent)
+                            }
+                            // Trigger ripple
+                            rippleScope.launch {
+                                rippleScale.snapTo(0f)
+                                rippleAlpha.snapTo(0.8f)
+                                launch { rippleScale.animateTo(1.8f, tween(600, easing = FastOutSlowInEasing)) }
+                                rippleAlpha.animateTo(0f, tween(600, easing = FastOutSlowInEasing))
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).background(
+                            if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            CircleShape
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -178,7 +208,7 @@ fun PulseIndicator(label: String, value: String, progress: Float, color: Color) 
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
             CircularProgressIndicator(
                 progress = progress,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().rotate(-90f),
                 strokeWidth = 6.dp,
                 color = color,
                 trackColor = color.copy(alpha = 0.1f),
@@ -279,7 +309,8 @@ fun KernelCard(
                                     points = extractPoints(key, history),
                                     modifier = Modifier.fillMaxSize(),
                                     color = MaterialTheme.colorScheme.primary,
-                                    fillGradient = true
+                                    fillGradient = true,
+                                    animate = true
                                 )
                             }
                         }
@@ -315,14 +346,57 @@ fun StatItem(label: String, value: String, modifier: Modifier) {
 
 fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
     return history.mapNotNull { entity ->
-        val raw = when (key) {
-            "battery" -> entity.data["battery.level"]?.removeSuffix("%")
-            "cpu_ram" -> entity.data["cpu.usage"]?.removeSuffix("%")
-            "network" -> entity.data["net.down_speed"]?.substringBefore(" ")
-            else -> null
+        when (key) {
+            "battery"    -> entity.data["battery.level"]?.removeSuffix("%")?.toFloatOrNull()
+            "cpu_ram"    -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
+            "sleep"      -> entity.data["sleep.deep_pct"]?.removeSuffix("%")?.toFloatOrNull()
+            "network"    -> entity.data["net.download"]?.let { parseSpeedToKbps(it) }
+            "data"       -> entity.data["data.today_total"]?.let { parseBytesToKb(it) }
+            "unlock"     -> entity.data["unlock.today"]?.toFloatOrNull()
+            "storage"    -> entity.data["storage.pct"]?.removeSuffix("%")?.toFloatOrNull()
+            "connection" -> entity.data["conn.rssi"]?.substringBefore(" ")?.toFloatOrNull()?.let { -it }
+            "screen"     -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
+            "uptime"     -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }
+            "steps"      -> entity.data["steps.today"]?.replace(",", "")?.toFloatOrNull()
+            "speedtest"  -> entity.data["speedtest.download"]?.substringBefore(" ")?.toFloatOrNull()
+            "fap"        -> entity.data["fap.today"]?.toFloatOrNull()
+            else         -> null
         }
-        raw?.toFloatOrNull()
     }
+}
+
+fun parseSpeedToKbps(speed: String): Float? {
+    val parts = speed.trim().split(" ")
+    val value = parts.getOrNull(0)?.toFloatOrNull() ?: return null
+    val unit = parts.getOrNull(1) ?: return value
+    return when {
+        unit.startsWith("MB") -> value * 1024f
+        unit.startsWith("KB") -> value
+        unit.startsWith("B")  -> value / 1024f
+        else -> value
+    }
+}
+
+fun parseBytesToKb(bytes: String): Float? {
+    val parts = bytes.trim().split(" ")
+    val value = parts.getOrNull(0)?.toFloatOrNull() ?: return null
+    val unit = parts.getOrNull(1) ?: return value
+    return when {
+        unit.startsWith("GB") -> value * 1024f * 1024f
+        unit.startsWith("MB") -> value * 1024f
+        unit.startsWith("KB") -> value
+        unit.startsWith("B")  -> value / 1024f
+        else -> value
+    }
+}
+
+fun parseDurationToMinutes(duration: String): Float? {
+    var total = 0f
+    Regex("""(\d+)d""").find(duration)?.groupValues?.get(1)?.toFloatOrNull()?.let { total += it * 1440f }
+    Regex("""(\d+)h""").find(duration)?.groupValues?.get(1)?.toFloatOrNull()?.let { total += it * 60f }
+    Regex("""(\d+)m""").find(duration)?.groupValues?.get(1)?.toFloatOrNull()?.let { total += it }
+    Regex("""(\d+)s""").find(duration)?.groupValues?.get(1)?.toFloatOrNull()?.let { total += it / 60f }
+    return if (total > 0f) total else null
 }
 
 @Composable
@@ -331,12 +405,25 @@ fun Sparkline(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     strokeWidth: androidx.compose.ui.unit.Dp = 2.dp,
-    fillGradient: Boolean = false
+    fillGradient: Boolean = false,
+    animate: Boolean = false
 ) {
     if (points.size < 2) return
     val min = points.minOrNull() ?: 0f
     val max = points.maxOrNull() ?: 1f
-    val range = if (max - min == 0f) 1f else max - min
+    val range = max - min
+
+    val drawProgress = remember { Animatable(if (animate) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animate) {
+            drawProgress.snapTo(0f)
+            drawProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+    val progress = drawProgress.value
 
     Canvas(modifier = modifier) {
         val width = size.width
@@ -346,29 +433,36 @@ fun Sparkline(
         val path = Path()
         points.forEachIndexed { index, value ->
             val x = index * stepX
-            val y = height - ((value - min) / range * height)
+            // When all values are the same (range==0): show at top if value>0, bottom if 0
+            val y = if (range == 0f) {
+                if (value > 0f) 0f else height
+            } else {
+                height - ((value - min) / range * height)
+            }
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
 
-        if (fillGradient) {
-            val fillPath = Path().apply {
-                addPath(path)
-                lineTo(width, height)
-                lineTo(0f, height)
-                close()
-            }
-            drawPath(
-                path = fillPath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(color.copy(alpha = 0.3f), Color.Transparent)
+        clipRect(right = width * progress) {
+            if (fillGradient) {
+                val fillPath = Path().apply {
+                    addPath(path)
+                    lineTo(width, height)
+                    lineTo(0f, height)
+                    close()
+                }
+                drawPath(
+                    path = fillPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(color.copy(alpha = 0.3f), Color.Transparent)
+                    )
                 )
+            }
+
+            drawPath(
+                path = path,
+                color = color,
+                style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
         }
-
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
     }
 }
