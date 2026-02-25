@@ -37,8 +37,10 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { }
 
-    private val REQUEST_PERMISSION_RESULT_LISTENER = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
-        // Handle permission result
+    private val REQUEST_PERMISSION_RESULT_LISTENER = object : Shizuku.OnRequestPermissionResultListener {
+        override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
+            // Handle permission result
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,6 +79,11 @@ class MainActivity : ComponentActivity() {
             ) perms.add(Manifest.permission.ACTIVITY_RECOGNITION)
         }
         if (perms.isNotEmpty()) permissionLauncher.launch(perms.toTypedArray())
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Shizuku.removeRequestPermissionResultListener(REQUEST_PERMISSION_RESULT_LISTENER)
     }
 }
 
@@ -189,10 +196,5 @@ fun MainApp() {
                 ModuleDetailScreen(moduleKey = key, viewModel = dashboardViewModel)
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Shizuku.removeRequestPermissionResultListener(REQUEST_PERMISSION_RESULT_LISTENER)
     }
 }
