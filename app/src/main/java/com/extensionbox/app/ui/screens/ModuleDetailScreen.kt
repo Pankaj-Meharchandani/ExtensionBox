@@ -22,6 +22,27 @@ import com.extensionbox.app.ui.components.StatItem
 import com.extensionbox.app.ui.components.extractPoints
 import com.extensionbox.app.ui.viewmodel.DashboardViewModel
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.extensionbox.app.MonitorService
+import com.extensionbox.app.ui.ModuleRegistry
+import com.extensionbox.app.ui.components.Sparkline
+import com.extensionbox.app.ui.components.StatItem
+import com.extensionbox.app.ui.components.extractPoints
+import com.extensionbox.app.ui.viewmodel.DashboardViewModel
+
 @Composable
 fun ModuleDetailScreen(
     moduleKey: String,
@@ -49,18 +70,26 @@ fun ModuleDetailScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    .height(220.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
             ) {
-                Box(modifier = Modifier.padding(16.dp)) {
-                    Sparkline(
-                        points = extractPoints(moduleKey, history),
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.primary,
-                        fillGradient = true,
-                        animate = true
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Timeline, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("History (15m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Sparkline(
+                            points = extractPoints(moduleKey, history),
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.primary,
+                            fillGradient = true,
+                            animate = true
+                        )
+                    }
                 }
             }
         }
@@ -68,17 +97,18 @@ fun ModuleDetailScreen(
         if (data.isNotEmpty()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Real-time Statistics",
+                        text = "Real-time Metrics",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
                     )
                     
                     val items = data.toList()
@@ -91,6 +121,10 @@ fun ModuleDetailScreen(
                             if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
+
+                    if (module != null && sysAccess != null) {
+                        module.composableContent(context, sysAccess)
+                    }
                 }
             }
         }
@@ -98,11 +132,24 @@ fun ModuleDetailScreen(
         if (module != null && sysAccess != null) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    module.composableContent(context, sysAccess)
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Settings, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Extension Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    module.settingsContent(context, sysAccess)
                     
                     if (moduleKey == "fap") {
                         Spacer(Modifier.height(16.dp))

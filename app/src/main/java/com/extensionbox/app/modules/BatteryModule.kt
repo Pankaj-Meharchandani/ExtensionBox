@@ -53,12 +53,27 @@ class BatteryModule : Module {
     override fun alive(): Boolean = running
     @androidx.compose.runtime.Composable
     override fun composableContent(ctx: android.content.Context, sys: com.extensionbox.app.SystemAccess) {
-        if (sys.rootProvider == com.extensionbox.app.SystemAccess.RootProvider.NONE) return
-
-        androidx.compose.material3.HorizontalDivider(
-            modifier = androidx.compose.ui.Modifier.padding(vertical = 12.dp),
-            color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant
+        // High level overview for the detail screen
+        val ma = if (currentMa >= 0) currentMa else kotlin.math.abs(currentMa)
+        val isCharge = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
+        
+        androidx.compose.material3.Text(
+            text = if (isCharge) "Current Input: ${ma}mA" else "Current Draw: ${ma}mA",
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            color = if (isCharge) androidx.compose.material3.MaterialTheme.colorScheme.primary else androidx.compose.material3.MaterialTheme.colorScheme.error
         )
+    }
+
+    @androidx.compose.runtime.Composable
+    override fun settingsContent(ctx: android.content.Context, sys: com.extensionbox.app.SystemAccess) {
+        if (sys.rootProvider == com.extensionbox.app.SystemAccess.RootProvider.NONE) {
+            androidx.compose.material3.Text(
+                "Root access required for charge limiting.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.error
+            )
+            return
+        }
 
         var limitEn by remember { 
             mutableStateOf(com.extensionbox.app.Prefs.getBool(ctx, "bat_charge_limit_en", false)) 
@@ -66,8 +81,6 @@ class BatteryModule : Module {
         var limitVal by remember { 
             mutableStateOf(com.extensionbox.app.Prefs.getInt(ctx, "bat_charge_limit_val", 80).toFloat()) 
         }
-
-        val scope = rememberCoroutineScope()
 
         Column {
             Row(

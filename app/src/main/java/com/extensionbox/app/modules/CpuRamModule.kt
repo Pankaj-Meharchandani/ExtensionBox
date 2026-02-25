@@ -189,6 +189,56 @@ class CpuRamModule : Module {
         return d
     }
 
+    @androidx.compose.runtime.Composable
+    override fun settingsContent(ctx: android.content.Context, sys: com.extensionbox.app.SystemAccess) {
+        var interval by androidx.compose.runtime.remember { 
+            androidx.compose.runtime.mutableStateOf(com.extensionbox.app.Prefs.getInt(ctx, "cpu_interval", 5000).toFloat()) 
+        }
+        var alertOn by androidx.compose.runtime.remember { 
+            androidx.compose.runtime.mutableStateOf(com.extensionbox.app.Prefs.getBool(ctx, "cpu_ram_alert", false)) 
+        }
+
+        androidx.compose.foundation.layout.Column {
+            androidx.compose.foundation.layout.Row(
+                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Text("Refresh Interval", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+                androidx.compose.material3.Text("${interval.toInt()}ms", color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+            }
+            androidx.compose.material3.Slider(
+                value = interval,
+                onValueChange = { 
+                    interval = it
+                    com.extensionbox.app.Prefs.setInt(ctx, "cpu_interval", it.toInt())
+                },
+                valueRange = 1000f..10000f,
+                steps = 8
+            )
+
+            androidx.compose.material3.HorizontalDivider(modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp))
+
+            androidx.compose.foundation.layout.Row(
+                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+            ) {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.material3.Text("RAM Usage Alert", style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+                    androidx.compose.material3.Text("Notify when usage is high", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                }
+                androidx.compose.material3.Switch(
+                    checked = alertOn,
+                    onCheckedChange = {
+                        alertOn = it
+                        com.extensionbox.app.Prefs.setBool(ctx, "cpu_ram_alert", it)
+                    }
+                )
+            }
+        }
+    }
+
     override fun checkAlerts(ctx: Context) {
         val alertOn = Prefs.getBool(ctx, "cpu_ram_alert", false)
         val thresh = Prefs.getInt(ctx, "cpu_ram_thresh", 90)

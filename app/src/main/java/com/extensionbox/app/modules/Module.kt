@@ -28,6 +28,12 @@ interface Module {
     fun composableContent(ctx: Context, sys: SystemAccess) {}
 
     /**
+     * Optional Compose UI for module-specific settings/configuration.
+     */
+    @androidx.compose.runtime.Composable
+    fun settingsContent(ctx: Context, sys: SystemAccess) {}
+
+    /**
      * Priority for notification ordering. Lower = higher priority.
      * Battery=10, Screen=20, Sleep=30, Network=40, Data=50, Unlock=60, Steps=70, SpeedTest=80, etc.
      */
