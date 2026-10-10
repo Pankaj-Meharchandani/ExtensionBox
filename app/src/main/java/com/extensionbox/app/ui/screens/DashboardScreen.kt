@@ -462,6 +462,8 @@ fun ThreeCircleDock(
 
         // --- Center Big Circle Widget (1st in order) ---
         val centerColor = getModuleColor(centerWidget.key)
+        val isCenterShortUnit = centerWidget.unit.isEmpty() || centerWidget.unit == "%" || centerWidget.unit.startsWith("°")
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -472,11 +474,11 @@ fun ThreeCircleDock(
                 )
                 .padding(4.dp)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(138.dp)) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(122.dp)) {
                 CircularProgressIndicator(
                     progress = { centerWidget.progress.coerceIn(0.05f, 1f) },
                     modifier = Modifier.fillMaxSize().rotate(-90f),
-                    strokeWidth = 10.dp,
+                    strokeWidth = 9.dp,
                     color = centerColor,
                     trackColor = centerColor.copy(alpha = 0.15f),
                     strokeCap = StrokeCap.Round
@@ -485,23 +487,40 @@ fun ThreeCircleDock(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(horizontal = 6.dp)
                 ) {
-                    AutoResizedText(
-                        text = centerWidget.fullDisplayValue,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Black,
-                        color = centerColor,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = centerWidget.label.uppercase(Locale.US),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                    if (isCenterShortUnit) {
+                        AutoResizedText(
+                            text = centerWidget.fullDisplayValue,
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Black,
+                            color = centerColor,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        AutoResizedText(
+                            text = centerWidget.valueNumber,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = centerColor,
+                            textAlign = TextAlign.Center
+                        )
+                        AutoResizedText(
+                            text = centerWidget.unit,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = centerColor.copy(alpha = 0.85f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = centerWidget.label.uppercase(Locale.US),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
 
         // --- Right Small Circle Widget (3rd in order) ---
