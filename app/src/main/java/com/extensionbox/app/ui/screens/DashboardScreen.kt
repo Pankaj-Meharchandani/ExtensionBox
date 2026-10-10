@@ -58,6 +58,7 @@ import java.util.Locale
 data class DockWidgetInfo(
     val key: String,
     val label: String,
+    val fullDisplayValue: String,
     val valueNumber: String,
     val unit: String,
     val progress: Float,
@@ -397,6 +398,8 @@ fun ThreeCircleDock(
         // --- Left Small Circle Widget (2nd in order) ---
         if (leftWidget != null) {
             val leftColor = getModuleColor(leftWidget.key)
+            val isShortUnit = leftWidget.unit.isEmpty() || leftWidget.unit == "%" || leftWidget.unit.startsWith("°")
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -420,14 +423,22 @@ fun ThreeCircleDock(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
-                        AutoResizedText(
-                            text = leftWidget.valueNumber,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = leftColor,
-                            textAlign = TextAlign.Center
-                        )
-                        if (leftWidget.unit.isNotEmpty()) {
+                        if (isShortUnit) {
+                            AutoResizedText(
+                                text = leftWidget.fullDisplayValue,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = leftColor,
+                                textAlign = TextAlign.Center
+                            )
+                        } else {
+                            AutoResizedText(
+                                text = leftWidget.valueNumber,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = leftColor,
+                                textAlign = TextAlign.Center
+                            )
                             AutoResizedText(
                                 text = leftWidget.unit,
                                 style = MaterialTheme.typography.labelSmall,
@@ -475,21 +486,12 @@ fun ThreeCircleDock(
                     modifier = Modifier.padding(horizontal = 6.dp)
                 ) {
                     AutoResizedText(
-                        text = centerWidget.valueNumber,
+                        text = centerWidget.fullDisplayValue,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Black,
                         color = centerColor,
                         textAlign = TextAlign.Center
                     )
-                    if (centerWidget.unit.isNotEmpty()) {
-                        AutoResizedText(
-                            text = centerWidget.unit,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = centerColor.copy(alpha = 0.85f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = centerWidget.label.uppercase(Locale.US),
@@ -505,6 +507,8 @@ fun ThreeCircleDock(
         // --- Right Small Circle Widget (3rd in order) ---
         if (rightWidget != null) {
             val rightColor = getModuleColor(rightWidget.key)
+            val isShortUnit = rightWidget.unit.isEmpty() || rightWidget.unit == "%" || rightWidget.unit.startsWith("°")
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -528,14 +532,22 @@ fun ThreeCircleDock(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
-                        AutoResizedText(
-                            text = rightWidget.valueNumber,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = rightColor,
-                            textAlign = TextAlign.Center
-                        )
-                        if (rightWidget.unit.isNotEmpty()) {
+                        if (isShortUnit) {
+                            AutoResizedText(
+                                text = rightWidget.fullDisplayValue,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = rightColor,
+                                textAlign = TextAlign.Center
+                            )
+                        } else {
+                            AutoResizedText(
+                                text = rightWidget.valueNumber,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = rightColor,
+                                textAlign = TextAlign.Center
+                            )
                             AutoResizedText(
                                 text = rightWidget.unit,
                                 style = MaterialTheme.typography.labelSmall,
@@ -567,62 +579,62 @@ private fun extractDockWidgetData(
     return when (key) {
         "battery" -> {
             val lvl = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("battery", context.getString(R.string.battery), "$lvl", "%", (lvl / 100f).coerceIn(0f, 1f), "battery")
+            DockWidgetInfo("battery", context.getString(R.string.battery), "$lvl%", "$lvl", "%", (lvl / 100f).coerceIn(0f, 1f), "battery")
         }
         "cpu" -> {
             val usage = dashData["cpu"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("cpu", context.getString(R.string.cpu_load), "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "cpu")
+            DockWidgetInfo("cpu", context.getString(R.string.cpu_load), "$usage%", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "cpu")
         }
         "ram" -> {
             val usage = dashData["ram"]?.get("ram.percentage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("ram", "RAM", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "ram")
+            DockWidgetInfo("ram", "RAM", "$usage%", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "ram")
         }
         "storage" -> {
             val usage = dashData["storage"]?.get("storage.percentage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("storage", "Storage", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "storage")
+            DockWidgetInfo("storage", "Storage", "$usage%", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "storage")
         }
         "data" -> {
             val usageStr = dashData["data"]?.get("data.today_total") ?: "--"
             val num = usageStr.substringBefore(" ")
             val unit = usageStr.substringAfter(" ", "")
-            DockWidgetInfo("data", "Data", num, unit, 0.5f, "data")
+            DockWidgetInfo("data", "Data", usageStr, num, unit, 0.5f, "data")
         }
         "steps" -> {
             val text = dashData["steps"]?.get("steps.today") ?: "--"
             val count = text.replace(",", "").toFloatOrNull() ?: 0f
-            DockWidgetInfo("steps", "Steps", text, "", (count / 10000f).coerceIn(0f, 1f), "steps")
+            DockWidgetInfo("steps", "Steps", text, text, "", (count / 10000f).coerceIn(0f, 1f), "steps")
         }
         "sleep" -> {
             val text = dashData["sleep"]?.get("sleep.deep_percentage") ?: "--"
             val pct = text.removeSuffix("%").toFloatOrNull() ?: 0f
-            DockWidgetInfo("sleep", "Sleep", "${pct.toInt()}", "%", (pct / 100f).coerceIn(0f, 1f), "sleep")
+            DockWidgetInfo("sleep", "Sleep", "${pct.toInt()}%", "${pct.toInt()}", "%", (pct / 100f).coerceIn(0f, 1f), "sleep")
         }
         "unlock" -> {
             val text = dashData["unlock"]?.get("unlock.today") ?: "--"
             val count = text.toFloatOrNull() ?: 0f
-            DockWidgetInfo("unlock", "Unlocks", text, "", (count / 50f).coerceIn(0f, 1f), "unlock")
+            DockWidgetInfo("unlock", "Unlocks", text, text, "", (count / 50f).coerceIn(0f, 1f), "unlock")
         }
         "network" -> {
             val speed = dashData["network"]?.get("net.download") ?: "--"
             val num = speed.substringBefore(" ")
             val unit = speed.substringAfter(" ", "")
-            DockWidgetInfo("network", "Speed", num, unit, 0.5f, "network")
+            DockWidgetInfo("network", "Speed", speed, num, unit, 0.5f, "network")
         }
         "uptime" -> {
             val uptimeStr = dashData["uptime"]?.get("uptime.duration") ?: "--"
             val num = uptimeStr.substringBefore(" ")
             val unit = uptimeStr.substringAfter(" ", "")
-            DockWidgetInfo("uptime", "Uptime", num, unit, 1.0f, "uptime")
+            DockWidgetInfo("uptime", "Uptime", uptimeStr, num, unit, 1.0f, "uptime")
         }
         "thermal" -> {
             val temp = dashData["battery"]?.get("battery.temp") ?: "--"
             val tVal = temp.removeSuffix("°C").removeSuffix("°F").toFloatOrNull() ?: 0f
             val num = if (temp.contains("°")) temp.substringBefore("°") else temp
             val unit = if (temp.contains("°")) "°" + temp.substringAfter("°") else ""
-            DockWidgetInfo("thermal", context.getString(R.string.thermal), num, unit, (tVal / 50f).coerceIn(0f, 1f), "battery")
+            DockWidgetInfo("thermal", context.getString(R.string.thermal), temp, num, unit, (tVal / 50f).coerceIn(0f, 1f), "battery")
         }
         else -> {
-            DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", "", 0f, key)
+            DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", "--", "", 0f, key)
         }
     }
 }
