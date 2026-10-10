@@ -51,7 +51,7 @@ import kotlinx.coroutines.Dispatchers
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
+fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () -> Unit = {}) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -474,6 +474,18 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     icon = Icons.Default.DeleteSweep,
                     color = MaterialTheme.colorScheme.error,
                     onClick = { showResetDialog = true }
+                )
+            }
+        }
+
+        // --- About Section ---
+        SettingsGroup(title = stringResource(id = R.string.about), icon = Icons.Default.Info) {
+            AppCard {
+                SettingsItem(
+                    title = stringResource(id = R.string.about),
+                    summary = stringResource(id = R.string.about_description),
+                    icon = Icons.Default.Info,
+                    onClick = onAboutClick
                 )
             }
         }

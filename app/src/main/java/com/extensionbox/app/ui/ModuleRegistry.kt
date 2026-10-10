@@ -15,7 +15,7 @@ data class ModuleDef(
 
 object ModuleRegistry {
 
-    private val MODULES = listOf(
+    private val ALL_MODULES = listOf(
         ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "Battery & Screen", "Battery health, power and screen usage", true),
         ModuleDef("app_usage", Icons.Rounded.Apps, "App Usage", "Time spent in each application", true),
         ModuleDef("cpu", Icons.Rounded.Memory, "CPU", "CPU usage, frequency and temperature", true),
@@ -31,6 +31,8 @@ object ModuleRegistry {
         ModuleDef("speedtest", Icons.Rounded.Speed, "Speed Test", "Periodic download/upload speed test", false),
         ModuleDef("privacy", Icons.Rounded.Shield, "Privacy Dashboard", "Permission usage and force-revoke tools", false)
     )
+
+    private val MODULES = ALL_MODULES.filter { it.key != "speedtest" }
 
     fun keyAt(i: Int): String = MODULES[i].key
     fun iconAt(i: Int): ImageVector = MODULES[i].icon

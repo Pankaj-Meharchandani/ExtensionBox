@@ -98,7 +98,7 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
 @Composable
 fun MainApp() {
     val navController = rememberNavController()
-    val screens = listOf(Screen.Dashboard, Screen.Extensions, Screen.Settings, Screen.About)
+    val screens = listOf(Screen.Dashboard, Screen.Extensions, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     
@@ -193,7 +193,7 @@ fun MainApp() {
             }, onDebloatClick = {
                 navController.navigate("debloat")
             }) }
-            composable(Screen.Settings.route) { SettingsScreen() }
+            composable(Screen.Settings.route) { SettingsScreen(onAboutClick = { navController.navigate(Screen.About.route) }) }
             composable(Screen.About.route) { AboutScreen() }
             composable("module/{key}") { backStackEntry ->
                 val key = backStackEntry.arguments?.getString("key") ?: return@composable
