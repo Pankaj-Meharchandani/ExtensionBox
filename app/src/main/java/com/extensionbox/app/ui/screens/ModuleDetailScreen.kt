@@ -205,7 +205,7 @@ fun ModuleDetailScreen(
             }
         }
 
-        if (data.isNotEmpty()) {
+        if (module != null && sysAccess != null) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
@@ -215,27 +215,27 @@ fun ModuleDetailScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = stringResource(id = R.string.real_time_metrics),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    val items = data.toList()
-                    items.chunked(2).forEach { rowItems ->
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            rowItems.forEach { pair ->
-                                val label = pair.first.substringAfterLast('.').replace("_", " ").replaceFirstChar { it.uppercase() }
-                                StatItem(label = label, value = pair.second, modifier = Modifier.weight(1f))
+                    if (data.isNotEmpty()) {
+                        Text(
+                            text = stringResource(id = R.string.real_time_metrics),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        val items = data.toList()
+                        items.chunked(2).forEach { rowItems ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                rowItems.forEach { pair ->
+                                    val label = pair.first.substringAfterLast('.').replace("_", " ").replaceFirstChar { it.uppercase() }
+                                    StatItem(label = label, value = pair.second, modifier = Modifier.weight(1f))
+                                }
+                                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                             }
-                            if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
 
-                    if (module != null && sysAccess != null) {
-                        module.composableContent(context, sysAccess)
-                    }
+                    module.composableContent(context, sysAccess)
                 }
             }
         }

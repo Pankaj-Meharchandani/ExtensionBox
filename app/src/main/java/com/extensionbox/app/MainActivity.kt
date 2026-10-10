@@ -196,6 +196,7 @@ fun MainApp() {
                 when (key) {
                     "debloat" -> navController.navigate("debloat")
                     "privacy" -> navController.navigate("privacy")
+                    "speedtest" -> navController.navigate("speedtest")
                     else -> navController.navigate("module/$key")
                 }
             }) }
@@ -210,6 +211,12 @@ fun MainApp() {
                 val sys = dashboardViewModel.sysAccess.collectAsState().value
                 if (sys != null) {
                     PrivacyScreen(sys = sys)
+                }
+            }
+            composable("speedtest") {
+                val sys = dashboardViewModel.sysAccess.collectAsState().value
+                if (sys != null) {
+                    SpeedTestScreen(sys = sys)
                 }
             }
         }
