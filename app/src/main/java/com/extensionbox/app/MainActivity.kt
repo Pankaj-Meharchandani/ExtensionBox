@@ -109,13 +109,17 @@ fun MainApp() {
     val dashboardViewModel: com.extensionbox.app.ui.viewmodel.DashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     val isTopLevel = currentDestination?.route in screens.map { it.route }
-    val title = if (isTopLevel) {
-        currentScreen.title
-    } else if (currentDestination?.route?.startsWith("module/") == true) {
-        val key = navBackStackEntry?.arguments?.getString("key") ?: ""
-        com.extensionbox.app.ui.ModuleRegistry.nameFor(key)
-    } else {
-        ""
+    val title = when {
+        isTopLevel -> currentScreen.title
+        currentDestination?.route?.startsWith("module/") == true -> {
+            val key = navBackStackEntry?.arguments?.getString("key") ?: ""
+            com.extensionbox.app.ui.ModuleRegistry.nameFor(key)
+        }
+        currentDestination?.route == "speedtest" -> "Speed Test"
+        currentDestination?.route == "debloat" -> "Debloat Tools"
+        currentDestination?.route == "privacy" -> "Privacy Dashboard"
+        currentDestination?.route == Screen.About.route -> Screen.About.title
+        else -> ""
     }
 
     AppScaffold(

@@ -57,32 +57,31 @@ fun DebloatScreen(
         viewModel.loadApps(packageManager)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Debloat Apps")
-                        Text(
-                            when {
-                                hasShizuku -> "Using Shizuku"
-                                isRooted -> "Using Root"
-                                else -> "Limited functionality (user apps only)"
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Text(
+                    text = when {
+                        hasShizuku -> "Mode: Shizuku"
+                        isRooted -> "Mode: Root"
+                        else -> "Mode: Limited functionality (user apps only)"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             item {
                 OutlinedTextField(
                     value = query,
@@ -134,11 +133,8 @@ fun DebloatScreen(
                     canUninstallSystem = hasShizuku || isRooted
                 )
             }
-
-            
         }
     }
-}
 
 
 @Composable

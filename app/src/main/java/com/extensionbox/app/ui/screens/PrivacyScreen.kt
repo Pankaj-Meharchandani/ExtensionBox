@@ -45,20 +45,15 @@ fun PrivacyScreen(
         viewModel.loadData(context, sys)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Privacy Dashboard") },
-                actions = {
-                    IconButton(onClick = { viewModel.loadData(context, sys) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = activeTab) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TabRow(
+                selectedTabIndex = activeTab,
+                modifier = Modifier.weight(1f)
+            ) {
                 Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
                     Text("Timeline", modifier = Modifier.padding(16.dp))
                 }
@@ -66,25 +61,31 @@ fun PrivacyScreen(
                     Text("Apps", modifier = Modifier.padding(16.dp))
                 }
             }
-
-            if (activeTab == 0) {
-                TimelineView(events)
-            } else {
-                AppListView(
-                    apps = apps.filter { it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true) },
-                    query = query,
-                    onQueryChange = { query = it },
-                    selectedApp = selectedAppPackage,
-                    onAppSelect = { 
-                        selectedAppPackage = it
-                        if (it != null) viewModel.loadAppPermissions(sys, it)
-                    },
-                    permissions = selectedAppPermissions,
-                    onPermissionUpdate = { op, mode ->
-                        selectedAppPackage?.let { pkg -> viewModel.updatePermission(sys, pkg, op, mode) }
-                    }
-                )
+            IconButton(
+                onClick = { viewModel.loadData(context, sys) },
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
+        }
+
+        if (activeTab == 0) {
+            TimelineView(events)
+        } else {
+            AppListView(
+                apps = apps.filter { it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true) },
+                query = query,
+                onQueryChange = { query = it },
+                selectedApp = selectedAppPackage,
+                onAppSelect = { 
+                    selectedAppPackage = it
+                    if (it != null) viewModel.loadAppPermissions(sys, it)
+                },
+                permissions = selectedAppPermissions,
+                onPermissionUpdate = { op, mode ->
+                    selectedAppPackage?.let { pkg -> viewModel.updatePermission(sys, pkg, op, mode) }
+                }
+            )
         }
     }
 }
