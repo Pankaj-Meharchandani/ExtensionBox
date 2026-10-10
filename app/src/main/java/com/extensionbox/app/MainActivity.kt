@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
 sealed class Screen(val route: String, val title: String, val selectedIcon: ImageVector, val unselectedIcon: ImageVector) {
     data object Dashboard : Screen("dashboard", "Dashboard", Icons.Filled.Dashboard, Icons.Outlined.Dashboard)
     data object Extensions : Screen("extensions", "Extensions", Icons.Filled.Extension, Icons.Outlined.Extension)
+    data object Tools : Screen("tools", "Tools", Icons.Filled.Build, Icons.Outlined.Build)
     data object Settings : Screen("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
     data object About : Screen("about", "About", Icons.Filled.Info, Icons.Outlined.Info)
 }
@@ -98,7 +99,7 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
 @Composable
 fun MainApp() {
     val navController = rememberNavController()
-    val screens = listOf(Screen.Dashboard, Screen.Extensions, Screen.Settings)
+    val screens = listOf(Screen.Dashboard, Screen.Extensions, Screen.Tools, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     
@@ -190,8 +191,13 @@ fun MainApp() {
             composable(Screen.Extensions.route) { ExtensionsScreen(onModuleClick = { key ->
                 if (key == "privacy") navController.navigate("privacy")
                 else navController.navigate("module/$key")
-            }, onDebloatClick = {
-                navController.navigate("debloat")
+            }) }
+            composable(Screen.Tools.route) { ToolsScreen(onToolClick = { key ->
+                when (key) {
+                    "debloat" -> navController.navigate("debloat")
+                    "privacy" -> navController.navigate("privacy")
+                    else -> navController.navigate("module/$key")
+                }
             }) }
             composable(Screen.Settings.route) { SettingsScreen(onAboutClick = { navController.navigate(Screen.About.route) }) }
             composable(Screen.About.route) { AboutScreen() }
