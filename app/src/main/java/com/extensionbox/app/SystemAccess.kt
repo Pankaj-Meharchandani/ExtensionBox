@@ -156,14 +156,21 @@ class SystemAccess(ctx: Context) {
 
     fun isEnhanced(): Boolean = rootAvailable || shizukuAvailableNow()
 
-    fun readSysFile(path: String): String? {
+    private val UNCACHED_PATHS = setOf("/proc/stat", "/proc/net/dev", "/proc/diskstats")
+
+    fun readSysFile(path: String, bypassCache: Boolean = false): String? {
+        val skipCache = bypassCache || path in UNCACHED_PATHS
         val now = System.currentTimeMillis()
-        cache[path]?.let { (value, timestamp) ->
-            if (now - timestamp < CACHE_TTL) return value
+        if (!skipCache) {
+            cache[path]?.let { (value, timestamp) ->
+                if (now - timestamp < CACHE_TTL) return value
+            }
         }
 
         val result = readSysFileInternal(path)
-        cache[path] = result to now
+        if (!skipCache) {
+            cache[path] = result to now
+        }
         return result
     }
 
@@ -446,10 +453,13 @@ class SystemAccess(ctx: Context) {
     }
 
     fun readCpuUsageFallback(): Float {
-        // Optimized: Use the persistent shell for 'top' if possible to avoid spawn overhead
+        // Method 1: CPU core frequency scaling ratio (accurate & responsive on non-root Android)
+        val freqUsage = readCpuUsageFromFrequencies()
+        if (freqUsage >= 0f) return freqUsage
+
+        // Method 2: Process table summation via 'top'
         val cmd = "top -n 1 -b"
         val output = if (rootAvailable) shell.exec(cmd) else {
-            // Fallback to normal exec if no root
             try {
                 val p = Runtime.getRuntime().exec(cmd.split(" ").toTypedArray())
                 val br = BufferedReader(InputStreamReader(p.inputStream))
@@ -465,26 +475,85 @@ class SystemAccess(ctx: Context) {
         return parseTopOutput(output ?: "")
     }
 
+    fun readCpuUsageFromFrequencies(): Float {
+        val count = getCpuCoreCount()
+        if (count <= 0) return -1f
+        var curTotal = 0L
+        var minTotal = 0L
+        var maxTotal = 0L
+        var validCores = 0
+
+        for (i in 0 until count) {
+            val cur = readSysFile("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq", bypassCache = true)?.toLongOrNull() ?: continue
+            val max = readSysFile("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq", bypassCache = true)?.toLongOrNull()
+                ?: readSysFile("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq", bypassCache = true)?.toLongOrNull() ?: continue
+            val min = readSysFile("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_min_freq", bypassCache = true)?.toLongOrNull()
+                ?: readSysFile("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_min_freq", bypassCache = true)?.toLongOrNull() ?: (max / 4)
+
+            if (max > min) {
+                curTotal += cur.coerceIn(min, max)
+                minTotal += min
+                maxTotal += max
+                validCores++
+            }
+        }
+
+        if (validCores == 0 || maxTotal <= minTotal) return -1f
+        val usage = (curTotal - minTotal).toFloat() * 100f / (maxTotal - minTotal).toFloat()
+        return usage.coerceIn(0f, 100f)
+    }
+
     private fun parseTopOutput(output: String): Float {
         try {
-            output.lines().forEach { line ->
+            val lines = output.lines()
+            var totalProcessCpu = 0f
+            var processHeaderFound = false
+            var cpuColIdx = -1
+
+            for (line in lines) {
+                val l = line.trim()
+                if (l.isEmpty()) continue
+
+                if (l.contains("PID") && (l.contains("%CPU") || l.contains("CPU"))) {
+                    processHeaderFound = true
+                    val cols = l.split(Regex("\\s+"))
+                    cpuColIdx = cols.indexOfFirst { it.equals("%CPU", ignoreCase = true) || it.equals("CPU", ignoreCase = true) }
+                    continue
+                }
+
+                if (processHeaderFound && cpuColIdx != -1) {
+                    val cols = l.split(Regex("\\s+"))
+                    if (cols.size > cpuColIdx) {
+                        val cpuVal = cols[cpuColIdx].removeSuffix("%").toFloatOrNull()
+                        if (cpuVal != null && cpuVal > 0f) {
+                            totalProcessCpu += cpuVal
+                        }
+                    }
+                }
+            }
+
+            if (totalProcessCpu > 0f) {
+                val cores = getCpuCoreCount().coerceAtLeast(1)
+                return if (totalProcessCpu > 100f) (totalProcessCpu / cores).coerceIn(0f, 100f) else totalProcessCpu
+            }
+
+            lines.forEach { line ->
                 val l = line.lowercase(java.util.Locale.US)
-                // New logic: detect total and idle to get reliable system-wide usage
                 if (l.contains("%cpu") && l.contains("%idle")) {
                     val mTotal = Regex("""(\d+)%cpu""").find(l)
                     val mIdle = Regex("""(\d+)%idle""").find(l)
                     if (mTotal != null && mIdle != null) {
                         val total = mTotal.groupValues[1].toFloat()
                         val idle = mIdle.groupValues[1].toFloat()
-                        if (total > 0) {
+                        if (total > 0 && total > idle) {
                             return ((total - idle) * 100f / total).coerceIn(0f, 100f)
                         }
                     }
                 }
-                
-                // Fallback to summing components
+
                 if (l.contains("user") && l.contains("sys")) {
-                    return parseCpuFromTopLine(l)
+                    val u = parseCpuFromTopLine(l)
+                    if (u > 0f) return u
                 }
             }
         } catch (ignored: Exception) {}

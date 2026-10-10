@@ -109,7 +109,7 @@ class CpuModule : Module {
     private fun readCpuTimes(): LongArray? {
         val s = sys ?: return null
         return try {
-            val line = s.readSysFile("/proc/stat")
+            val line = s.readSysFile("/proc/stat", bypassCache = true)
             if (line != null && line.startsWith("cpu ")) {
                 val parts = line.substring(4).trim().split(Regex("\\s+"))
                 val times = LongArray(parts.size.coerceAtMost(7))
