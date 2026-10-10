@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.extensionbox.app.SystemAccess
+import com.extensionbox.app.ui.components.SingleOptionSelectionDialog
 import com.extensionbox.app.ui.viewmodel.PrivacyViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -192,24 +193,35 @@ fun AppPermissionCard(
 
 @Composable
 fun PermissionRow(perm: PermissionInfo, onUpdate: (String, String) -> Unit) {
+    var showDialog by remember { mutableStateOf(false) }
+
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(perm.opName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         
-        var expanded by remember { mutableStateOf(false) }
-        Box {
-            TextButton(onClick = { expanded = true }) {
-                Text(perm.modeName.uppercase(), color = when(perm.mode) {
-                    0 -> Color.Green
-                    1, 2 -> Color.Red
-                    else -> MaterialTheme.colorScheme.onSurface
-                })
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(text = { Text("Allow") }, onClick = { onUpdate(perm.opName, "allow"); expanded = false })
-                DropdownMenuItem(text = { Text("Ignore (Fake success)") }, onClick = { onUpdate(perm.opName, "ignore"); expanded = false })
-                DropdownMenuItem(text = { Text("Deny") }, onClick = { onUpdate(perm.opName, "deny"); expanded = false })
-                DropdownMenuItem(text = { Text("Default") }, onClick = { onUpdate(perm.opName, "default"); expanded = false })
-            }
+        TextButton(onClick = { showDialog = true }) {
+            Text(perm.modeName.uppercase(), color = when(perm.mode) {
+                0 -> Color.Green
+                1, 2 -> Color.Red
+                else -> MaterialTheme.colorScheme.onSurface
+            })
         }
+    }
+
+    if (showDialog) {
+        SingleOptionSelectionDialog(
+            title = "Permission Mode: ${perm.opName}",
+            options = listOf("allow", "ignore", "deny", "default"),
+            selectedOption = perm.modeName.lowercase(),
+            optionLabel = {
+                when (it) {
+                    "allow" -> "Allow"
+                    "ignore" -> "Ignore (Fake success)"
+                    "deny" -> "Deny"
+                    else -> "Default"
+                }
+            },
+            onOptionSelected = { mode -> onUpdate(perm.opName, mode) },
+            onDismissRequest = { showDialog = false }
+        )
     }
 }

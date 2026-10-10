@@ -37,6 +37,7 @@ import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ThemeHelper
 import com.extensionbox.app.db.AppDatabase
 import com.extensionbox.app.ui.components.AppCard
+import com.extensionbox.app.ui.components.SingleOptionSelectionDialog
 import org.json.JSONObject
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
@@ -56,7 +57,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val themeIndex by viewModel.themeIndex.collectAsState()
-    var expanded by remember { mutableStateOf(false) }
 
     val isShizukuRunning by viewModel.isShizukuRunning.collectAsState()
     val shizukuPermissionGranted by viewModel.shizukuPermissionGranted.collectAsState()
@@ -275,27 +275,27 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-                var layoutExpanded by remember { mutableStateOf(false) }
+                var showLayoutDialog by remember { mutableStateOf(false) }
                 var layoutStyle by remember { mutableStateOf(Prefs.getString(context, "notif_layout_style", "PUZZLE") ?: "PUZZLE") }
                 
                 SettingsItem(
                     title = stringResource(id = R.string.layout_style),
                     summary = layoutStyle,
                     icon = Icons.Default.Dashboard,
-                    onClick = { layoutExpanded = true }
+                    onClick = { showLayoutDialog = true }
                 )
-                
-                DropdownMenu(expanded = layoutExpanded, onDismissRequest = { layoutExpanded = false }) {
-                    listOf("PUZZLE", "LIST", "GRID").forEach { style ->
-                        DropdownMenuItem(
-                            text = { Text(style) },
-                            onClick = {
-                                layoutStyle = style
-                                Prefs.setString(context, "notif_layout_style", style)
-                                layoutExpanded = false
-                            }
-                        )
-                    }
+
+                if (showLayoutDialog) {
+                    SingleOptionSelectionDialog(
+                        title = stringResource(id = R.string.layout_style),
+                        options = listOf("PUZZLE", "LIST", "GRID"),
+                        selectedOption = layoutStyle,
+                        onOptionSelected = { style ->
+                            layoutStyle = style
+                            Prefs.setString(context, "notif_layout_style", style)
+                        },
+                        onDismissRequest = { showLayoutDialog = false }
+                    )
                 }
             }
         }
@@ -303,23 +303,26 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         // --- Appearance Section ---
         SettingsGroup(title = stringResource(id = R.string.appearance), icon = Icons.Default.Palette) {
             AppCard {
+                var showThemeDialog by remember { mutableStateOf(false) }
+
                 SettingsItem(
                     title = stringResource(id = R.string.app_theme),
                     summary = ThemeHelper.NAMES[themeIndex.coerceIn(0, ThemeHelper.NAMES.size - 1)],
                     icon = Icons.Default.ColorLens,
-                    onClick = { expanded = true }
+                    onClick = { showThemeDialog = true }
                 )
-                
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    ThemeHelper.NAMES.forEachIndexed { index, name ->
-                        DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                viewModel.updateTheme(index)
-                                expanded = false
-                            }
-                        )
-                    }
+
+                if (showThemeDialog) {
+                    SingleOptionSelectionDialog(
+                        title = stringResource(id = R.string.app_theme),
+                        options = ThemeHelper.NAMES.toList(),
+                        selectedOption = ThemeHelper.NAMES[themeIndex.coerceIn(0, ThemeHelper.NAMES.size - 1)],
+                        onOptionSelected = { selectedName ->
+                            val idx = ThemeHelper.NAMES.indexOf(selectedName)
+                            if (idx >= 0) viewModel.updateTheme(idx)
+                        },
+                        onDismissRequest = { showThemeDialog = false }
+                    )
                 }
 
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
