@@ -48,6 +48,8 @@ object ModuleRegistry {
         return MODULES.find { it.key == key }?.name ?: key
     }
 
+    fun getModules(): List<com.extensionbox.app.modules.Module> = MODULES.mapNotNull { getModule(it.key) }
+
     fun getModule(key: String): com.extensionbox.app.modules.Module? {
         return when (key) {
             "battery" -> com.extensionbox.app.modules.BatteryModule()

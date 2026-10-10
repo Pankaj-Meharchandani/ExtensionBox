@@ -87,7 +87,8 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                     }
                 }
             } else {
-                items(visibleModules, key = { it }) { key ->
+                items(visibleModules, key = { it.key() }) { module ->
+                    val key = module.key()
                     val data = dashData[key]
                     if (data != null) {
                         ReorderableItem(reorderableState, key = key) { isDragging ->

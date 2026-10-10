@@ -343,6 +343,11 @@
     <string name="reset_all_data_action">Reset</string>
     <string name="dialog_cancel">Cancel</string>
     <string name="history_15m">History (15m)</string>
+    <string name="history_title">History</string>
+    <string name="history_no_data">Not enough data for this range yet</string>
+    <string name="history_export_csv">Export CSV</string>
+    <string name="history_exported">Exported %1$d rows</string>
+    <string name="history_export_failed">Export failed</string>
     <string name="real_time_metrics">Real-time Metrics</string>
     <string name="extension_settings">Extension Settings</string>
     <string name="log_action">Log Action</string>

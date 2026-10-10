@@ -22,4 +22,23 @@ interface ModuleDataDao {
 
     @Query("DELETE FROM module_data WHERE timestamp < :before")
     suspend fun clearOldData(before: Long)
+
+    /**
+     * Downsampled history: keeps the first sample of each [bucketMs]-wide time bucket, so a chart over
+     * days loads a couple of hundred rows instead of every tick ever stored.
+     */
+    @Query("""
+        SELECT * FROM module_data
+        WHERE id IN (
+            SELECT MIN(id) FROM module_data
+            WHERE moduleKey = :key AND timestamp >= :after
+            GROUP BY timestamp / :bucketMs
+        )
+        ORDER BY timestamp ASC
+    """)
+    suspend fun getHistoryBucketed(key: String, after: Long, bucketMs: Long): List<ModuleDataEntity>
+
+    /** One page of rows in insertion order for streaming exports; pass the last id of the previous page (0 to start). */
+    @Query("SELECT * FROM module_data WHERE moduleKey = :key AND timestamp >= :after AND id > :afterId ORDER BY id ASC LIMIT :limit")
+    suspend fun getHistoryPage(key: String, after: Long, afterId: Long, limit: Int): List<ModuleDataEntity>
 }

@@ -79,6 +79,14 @@ fun SettingSwitch(
     }
 }
 
+// Keys extractPoints can chart. Keep in sync with the `when` below.
+private val CHART_KEYS = setOf(
+    "battery", "cpu", "ram", "sleep", "network", "data", "unlock", "storage",
+    "connection", "screen", "uptime", "steps", "speedtest", "habit"
+)
+
+fun hasChart(key: String): Boolean = key in CHART_KEYS
+
 fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
     return history.mapNotNull { entity ->
         when (key) {
@@ -94,7 +102,7 @@ fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
             "screen"     -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
             "uptime"     -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }
             "steps"      -> entity.data["steps.today"]?.replace(",", "")?.toFloatOrNull()
-            "speedtest"  -> entity.data["speedtest.download"]?.substringBefore(" ")?.toFloatOrNull()
+            "speedtest"  -> entity.data["speedtest.download"]?.let { parseSpeedToKbps(it) }
             "habit"      -> entity.data["habit.today"]?.toFloatOrNull()
             else         -> null
         }
