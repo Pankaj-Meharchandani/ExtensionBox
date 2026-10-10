@@ -358,6 +358,12 @@
     <string name="privacy_module_compact_text">Last: %1$s (%2$s)</string>
     <string name="privacy_module_recent_activity">Recent Activity:</string>
     <string name="privacy_module_no_activity">No recent sensitive activity found</string>
+    <string name="customize_top_dock">Top Dock Widgets</string>
+    <string name="customize_top_dock_desc">Select and arrange up to 5 widgets in the top dock</string>
+    <string name="add_widget">Add Widget</string>
+    <string name="max_widgets_reached">Maximum 5 widgets allowed</string>
+    <string name="min_widgets_reached">At least 1 widget required</string>
+    <string name="dialog_save">Save</string>
     <string name="privacy_module_update_interval">Refresh Interval</string>
     <string name="privacy_module_interval_formatter">%1$dm</string>
     <string name="privacy_module_force_revoke">Force Revoke</string>
