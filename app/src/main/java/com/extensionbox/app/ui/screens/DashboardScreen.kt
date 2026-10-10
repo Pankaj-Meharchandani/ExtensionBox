@@ -71,6 +71,25 @@ private val ALL_DOCK_WIDGET_OPTIONS = listOf(
     "uptime" to "Device Uptime"
 )
 
+fun getModuleColor(key: String): Color {
+    return when (key) {
+        "battery" -> Color(0xFF00E676)   // Lime/Green
+        "cpu" -> Color(0xFF00B0FF)       // Electric Cyan
+        "ram" -> Color(0xFFAB47BC)       // Violet/Purple
+        "thermal" -> Color(0xFFFF6D00)   // Deep Orange
+        "storage" -> Color(0xFFFFD600)   // Gold/Yellow
+        "data" -> Color(0xFF1DE9B6)      // Teal/Turquoise
+        "steps" -> Color(0xFF2979FF)     // Electric Blue
+        "sleep" -> Color(0xFF7E57C2)     // Deep Purple/Indigo
+        "unlock" -> Color(0xFFFF4081)    // Bright Pink
+        "network" -> Color(0xFF00E5FF)   // Light Cyan
+        "uptime" -> Color(0xFF3F51B5)    // Indigo
+        "speedtest" -> Color(0xFFFF9100) // Orange
+        "privacy" -> Color(0xFF3D5AFF)   // Shield Blue
+        else -> Color(0xFF00B0FF)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: (String) -> Unit = {}) {
@@ -152,10 +171,11 @@ fun SystemPulseHero(
     onModuleClick: (String) -> Unit
 ) {
     var dockKeysStr by remember {
-        mutableStateOf(Prefs.getString(context, "top_dock_widgets", "sleep,steps,battery") ?: "sleep,steps,battery")
+        mutableStateOf(Prefs.getString(context, "top_dock_widgets", "battery,cpu,thermal") ?: "battery,cpu,thermal")
     }
     val dockKeys = remember(dockKeysStr) {
-        dockKeysStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val parsed = dockKeysStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (parsed.size >= 3) parsed.take(3) else (parsed + listOf("battery", "cpu", "thermal")).distinct().take(3)
     }
     var showCustomizeDialog by remember { mutableStateOf(false) }
 
@@ -163,14 +183,6 @@ fun SystemPulseHero(
     val rippleScale = remember { Animatable(0f) }
     val rippleAlpha = remember { Animatable(0f) }
     val primaryColor = MaterialTheme.colorScheme.primary
-
-    val dockWidgetColors = listOf(
-        Color(0xFF6C72FF), // Purple/Indigo for Left
-        Color(0xFF00A3FF), // Electric Blue for Center Ring
-        Color(0xFFFFB800), // Gold/Orange for Right
-        Color(0xFF00E676), // Green for extra
-        Color(0xFFFF2D55)  // Red/Pink for extra
-    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -180,7 +192,7 @@ fun SystemPulseHero(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
-                // Header with Status and Pen Edit Button
+                // Header with Engine Toggle & Edit Pencil Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -203,7 +215,7 @@ fun SystemPulseHero(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Start/Stop engine toggle
+                        // Start/Stop engine button
                         Box(contentAlignment = Alignment.Center) {
                             Canvas(modifier = Modifier.size(64.dp)) {
                                 val radius = size.minDimension / 2 * rippleScale.value
@@ -244,7 +256,7 @@ fun SystemPulseHero(
 
                         Spacer(Modifier.width(8.dp))
 
-                        // Edit Pencil Icon
+                        // Edit Pencil Icon Button
                         IconButton(
                             onClick = { showCustomizeDialog = true },
                             modifier = Modifier.size(36.dp)
@@ -252,7 +264,7 @@ fun SystemPulseHero(
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = stringResource(id = R.string.customize_top_dock),
-                                tint = Color.White.copy(alpha = 0.8f),
+                                tint = Color.White.copy(alpha = 0.85f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -261,14 +273,13 @@ fun SystemPulseHero(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Concentric Arc Gauges Row
+                // 3 Circle Dock Layout (1st in order is CENTER BIG CIRCLE, 2nd is LEFT SMALL CIRCLE, 3rd is RIGHT SMALL CIRCLE)
                 val dockWidgetInfos = remember(dockKeys, dashData) {
                     dockKeys.map { extractDockWidgetData(it, dashData, context) }
                 }
 
-                ConcentricArcDock(
+                ThreeCircleDock(
                     dockWidgets = dockWidgetInfos,
-                    colors = dockWidgetColors,
                     onModuleClick = onModuleClick,
                     onEditClick = { showCustomizeDialog = true }
                 )
@@ -300,7 +311,7 @@ fun SystemPulseHero(
             onDismiss = { showCustomizeDialog = false },
             onSave = { updatedKeys ->
                 showCustomizeDialog = false
-                val joined = updatedKeys.joinToString(",")
+                val joined = updatedKeys.take(3).joinToString(",")
                 Prefs.setString(context, "top_dock_widgets", joined)
                 dockKeysStr = joined
             }
@@ -310,18 +321,17 @@ fun SystemPulseHero(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ConcentricArcDock(
+fun ThreeCircleDock(
     dockWidgets: List<DockWidgetInfo>,
-    colors: List<Color>,
     onModuleClick: (String) -> Unit,
     onEditClick: () -> Unit
 ) {
     if (dockWidgets.isEmpty()) return
 
-    val centerIdx = if (dockWidgets.size >= 3) 1 else 0
-    val centerWidget = dockWidgets.getOrNull(centerIdx) ?: dockWidgets.first()
-    val leftWidget = if (dockWidgets.size >= 2) dockWidgets.getOrNull(0) else null
-    val rightWidget = if (dockWidgets.size >= 3) dockWidgets.getOrNull(2) else if (dockWidgets.size == 2) dockWidgets.getOrNull(1) else null
+    // 1st in order is Center Widget, 2nd is Left, 3rd is Right
+    val centerWidget = dockWidgets.getOrNull(0) ?: return
+    val leftWidget = dockWidgets.getOrNull(1)
+    val rightWidget = dockWidgets.getOrNull(2)
 
     Row(
         modifier = Modifier
@@ -331,9 +341,9 @@ fun ConcentricArcDock(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Flanking Arc Widget
-        if (leftWidget != null && leftWidget != centerWidget) {
-            val leftColor = colors.getOrElse(0) { Color(0xFF6C72FF) }
+        // --- Left Small Circle Widget (2nd in order) ---
+        if (leftWidget != null) {
+            val leftColor = getModuleColor(leftWidget.key)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -342,56 +352,38 @@ fun ConcentricArcDock(
                         onClick = { onModuleClick(leftWidget.targetModuleKey) },
                         onLongClick = onEditClick
                     )
-                    .padding(6.dp)
+                    .padding(4.dp)
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeWidth = 10.dp.toPx()
-                        val diameter = size.minDimension - strokeWidth
-                        val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
-                        val arcSize = Size(diameter, diameter)
-
-                        drawArc(
-                            color = leftColor.copy(alpha = 0.15f),
-                            startAngle = 115f,
-                            sweepAngle = 130f,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                        drawArc(
-                            color = leftColor,
-                            startAngle = 115f,
-                            sweepAngle = 130f * leftWidget.progress.coerceIn(0.05f, 1f),
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = leftWidget.value,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = leftColor
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = leftWidget.label.uppercase(Locale.US),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(78.dp)) {
+                    CircularProgressIndicator(
+                        progress = { leftWidget.progress.coerceIn(0.05f, 1f) },
+                        modifier = Modifier.fillMaxSize().rotate(-90f),
+                        strokeWidth = 6.dp,
+                        color = leftColor,
+                        trackColor = leftColor.copy(alpha = 0.15f),
+                        strokeCap = StrokeCap.Round
+                    )
+                    Text(
+                        text = leftWidget.value,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = leftColor,
+                        textAlign = TextAlign.Center
+                    )
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = leftWidget.label.uppercase(Locale.US),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
         }
 
-        // Center Prominent Circle Widget
-        val centerColor = colors.getOrElse(1) { Color(0xFF00A3FF) }
+        // --- Center Big Circle Widget (1st in order) ---
+        val centerColor = getModuleColor(centerWidget.key)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -400,56 +392,40 @@ fun ConcentricArcDock(
                     onClick = { onModuleClick(centerWidget.targetModuleKey) },
                     onLongClick = onEditClick
                 )
-                .padding(6.dp)
+                .padding(4.dp)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(145.dp)) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidth = 12.dp.toPx()
-                    val diameter = size.minDimension - strokeWidth
-                    val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
-                    val arcSize = Size(diameter, diameter)
-
-                    drawArc(
-                        color = centerColor.copy(alpha = 0.15f),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth)
-                    )
-                    drawArc(
-                        color = centerColor,
-                        startAngle = -90f,
-                        sweepAngle = 360f * centerWidget.progress.coerceIn(0.05f, 1f),
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                    )
-                }
-
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(135.dp)) {
+                CircularProgressIndicator(
+                    progress = { centerWidget.progress.coerceIn(0.05f, 1f) },
+                    modifier = Modifier.fillMaxSize().rotate(-90f),
+                    strokeWidth = 10.dp,
+                    color = centerColor,
+                    trackColor = centerColor.copy(alpha = 0.15f),
+                    strokeCap = StrokeCap.Round
+                )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = centerWidget.value,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Black,
-                        color = centerColor
+                        color = centerColor,
+                        textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = centerWidget.label.uppercase(Locale.US),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
         }
 
-        // Right Flanking Arc Widget
-        if (rightWidget != null && rightWidget != centerWidget) {
-            val rightColor = colors.getOrElse(2) { Color(0xFFFFB800) }
+        // --- Right Small Circle Widget (3rd in order) ---
+        if (rightWidget != null) {
+            val rightColor = getModuleColor(rightWidget.key)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -458,51 +434,33 @@ fun ConcentricArcDock(
                         onClick = { onModuleClick(rightWidget.targetModuleKey) },
                         onLongClick = onEditClick
                     )
-                    .padding(6.dp)
+                    .padding(4.dp)
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeWidth = 10.dp.toPx()
-                        val diameter = size.minDimension - strokeWidth
-                        val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
-                        val arcSize = Size(diameter, diameter)
-
-                        drawArc(
-                            color = rightColor.copy(alpha = 0.15f),
-                            startAngle = -65f,
-                            sweepAngle = 130f,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                        drawArc(
-                            color = rightColor,
-                            startAngle = -65f,
-                            sweepAngle = 130f * rightWidget.progress.coerceIn(0.05f, 1f),
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = rightWidget.value,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = rightColor
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = rightWidget.label.uppercase(Locale.US),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(78.dp)) {
+                    CircularProgressIndicator(
+                        progress = { rightWidget.progress.coerceIn(0.05f, 1f) },
+                        modifier = Modifier.fillMaxSize().rotate(-90f),
+                        strokeWidth = 6.dp,
+                        color = rightColor,
+                        trackColor = rightColor.copy(alpha = 0.15f),
+                        strokeCap = StrokeCap.Round
+                    )
+                    Text(
+                        text = rightWidget.value,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = rightColor,
+                        textAlign = TextAlign.Center
+                    )
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = rightWidget.label.uppercase(Locale.US),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -576,12 +534,16 @@ fun TopDockCustomizerDialog(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
-    val activeKeys = remember { mutableStateListOf<String>().apply { addAll(currentKeys) } }
-    var expandedDropdown by remember { mutableStateOf(false) }
-
-    val availableOptions = remember(activeKeys.toList()) {
-        ALL_DOCK_WIDGET_OPTIONS.filter { it.first !in activeKeys }
+    val activeKeys = remember {
+        mutableStateListOf<String>().apply {
+            addAll(currentKeys.take(3))
+            while (size < 3) {
+                val candidate = ALL_DOCK_WIDGET_OPTIONS.firstOrNull { it.first !in this }?.first ?: "battery"
+                add(candidate)
+            }
+        }
     }
+    var expandedDropdownIndex by remember { mutableIntStateOf(-1) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -589,99 +551,68 @@ fun TopDockCustomizerDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = stringResource(id = R.string.customize_top_dock_desc),
+                    text = "Top Dock slots (Slot 1 is Center Big Circle, Slots 2 & 3 are Left & Right Small Circles):",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Text(
-                    text = "Active Widgets (${activeKeys.size}/5):",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     activeKeys.forEachIndexed { idx, key ->
+                        val slotLabel = when (idx) {
+                            0 -> "Slot 1 (Center Big Circle)"
+                            1 -> "Slot 2 (Left Small Circle)"
+                            else -> "Slot 3 (Right Small Circle)"
+                        }
                         val name = ALL_DOCK_WIDGET_OPTIONS.find { it.first == key }?.second ?: key
+
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = "${idx + 1}. $name",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f)
+                                    text = slotLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
                                 )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
+                                    )
 
-                                Row {
-                                    if (idx > 0) {
-                                        IconButton(
-                                            onClick = {
-                                                val tmp = activeKeys[idx]
-                                                activeKeys[idx] = activeKeys[idx - 1]
-                                                activeKeys[idx - 1] = tmp
-                                            },
-                                            modifier = Modifier.size(32.dp)
+                                    Box {
+                                        Button(
+                                            onClick = { expandedDropdownIndex = idx },
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                         ) {
-                                            Icon(Icons.Default.ArrowUpward, contentDescription = "Move Up", modifier = Modifier.size(16.dp))
+                                            Text("Change", style = MaterialTheme.typography.labelSmall)
                                         }
-                                    }
-                                    if (idx < activeKeys.size - 1) {
-                                        IconButton(
-                                            onClick = {
-                                                val tmp = activeKeys[idx]
-                                                activeKeys[idx] = activeKeys[idx + 1]
-                                                activeKeys[idx + 1] = tmp
-                                            },
-                                            modifier = Modifier.size(32.dp)
+
+                                        DropdownMenu(
+                                            expanded = expandedDropdownIndex == idx,
+                                            onDismissRequest = { expandedDropdownIndex = -1 }
                                         ) {
-                                            Icon(Icons.Default.ArrowDownward, contentDescription = "Move Down", modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                    if (activeKeys.size > 1) {
-                                        IconButton(
-                                            onClick = { activeKeys.removeAt(idx) },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            ALL_DOCK_WIDGET_OPTIONS.forEach { (optKey, optLabel) ->
+                                                DropdownMenuItem(
+                                                    text = { Text(optLabel) },
+                                                    onClick = {
+                                                        activeKeys[idx] = optKey
+                                                        expandedDropdownIndex = -1
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                if (activeKeys.size < 5 && availableOptions.isNotEmpty()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Button(
-                            onClick = { expandedDropdown = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(id = R.string.add_widget))
-                        }
-
-                        DropdownMenu(
-                            expanded = expandedDropdown,
-                            onDismissRequest = { expandedDropdown = false }
-                        ) {
-                            availableOptions.forEach { (optionKey, optionLabel) ->
-                                DropdownMenuItem(
-                                    text = { Text(optionLabel) },
-                                    onClick = {
-                                        activeKeys.add(optionKey)
-                                        expandedDropdown = false
-                                    }
-                                )
                             }
                         }
                     }
@@ -690,8 +621,7 @@ fun TopDockCustomizerDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(activeKeys.toList()) },
-                enabled = activeKeys.isNotEmpty()
+                onClick = { onSave(activeKeys.toList()) }
             ) {
                 Text(stringResource(id = R.string.dialog_save))
             }
