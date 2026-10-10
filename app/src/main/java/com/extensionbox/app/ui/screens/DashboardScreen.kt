@@ -3,6 +3,7 @@ package com.extensionbox.app.ui.screens
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -155,6 +156,10 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
     val visibleModules by viewModel.visibleModules.collectAsState()
     val sysAccess by viewModel.sysAccess.collectAsState()
 
+    var layoutStyle by remember {
+        mutableStateOf(Prefs.getString(context, "notif_layout_style", "LIST") ?: "LIST")
+    }
+
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         viewModel.updateOrder(from.index, to.index)
@@ -177,6 +182,46 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                 )
             }
 
+            if (isRunning && visibleModules.isNotEmpty()) {
+                item(key = "layout_switcher_bar") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Layout: $layoutStyle",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        IconButton(
+                            onClick = {
+                                val next = when (layoutStyle) {
+                                    "LIST" -> "GRID"
+                                    "GRID" -> "PUZZLE"
+                                    else -> "LIST"
+                                }
+                                layoutStyle = next
+                                Prefs.setString(context, "notif_layout_style", next)
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = when (layoutStyle) {
+                                    "GRID" -> Icons.Default.GridView
+                                    "PUZZLE" -> Icons.Default.Dashboard
+                                    else -> Icons.Default.Menu
+                                },
+                                contentDescription = "Switch Layout",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             if (!isRunning) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -188,7 +233,92 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                         )
                     }
                 }
+            } else if (layoutStyle == "GRID") {
+                // --- 1. GRID MODE (2-Column Grid) ---
+                val validModules = visibleModules.filter { dashData.containsKey(it.key()) }
+                val pairs = validModules.chunked(2)
+                items(pairs, key = { pair -> pair.joinToString("-") { it.key() } }) { rowModules ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowModules.forEach { module ->
+                            val key = module.key()
+                            val data = dashData[key] ?: emptyMap()
+                            GridKernelCard(
+                                key = key,
+                                data = data,
+                                history = historyData[key] ?: emptyList(),
+                                onClick = { onModuleClick(key) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (rowModules.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            } else if (layoutStyle == "PUZZLE") {
+                // --- 2. PUZZLE MODE (Asymmetrical Bento Masonry) ---
+                val validModules = visibleModules.filter { dashData.containsKey(it.key()) }
+                var idx = 0
+                val puzzleItems = mutableListOf<@Composable () -> Unit>()
+
+                while (idx < validModules.size) {
+                    if (idx % 3 == 0) {
+                        val heroModule = validModules[idx]
+                        val key = heroModule.key()
+                        val data = dashData[key] ?: emptyMap()
+                        puzzleItems.add {
+                            KernelCard(
+                                key = key,
+                                data = data,
+                                history = historyData[key] ?: emptyList(),
+                                sysAccess = sysAccess,
+                                onClick = { onModuleClick(key) },
+                                reorderableItemScope = null,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        idx++
+                    } else {
+                        val pairList = mutableListOf<com.extensionbox.app.modules.Module>()
+                        pairList.add(validModules[idx])
+                        if (idx + 1 < validModules.size && (idx + 1) % 3 != 0) {
+                            pairList.add(validModules[idx + 1])
+                            idx += 2
+                        } else {
+                            idx++
+                        }
+                        puzzleItems.add {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                pairList.forEach { module ->
+                                    val key = module.key()
+                                    val data = dashData[key] ?: emptyMap()
+                                    PuzzleTileCard(
+                                        key = key,
+                                        data = data,
+                                        history = historyData[key] ?: emptyList(),
+                                        onClick = { onModuleClick(key) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (pairList.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                items(puzzleItems.size, key = { it }) { itemIdx ->
+                    puzzleItems[itemIdx]()
+                }
             } else {
+                // --- 3. LIST MODE (Default Vertical List with Drag Reorder) ---
                 items(visibleModules, key = { it.key() }) { module ->
                     val key = module.key()
                     val data = dashData[key]
@@ -590,6 +720,152 @@ fun ThreeCircleDock(
     }
 }
 
+@Composable
+fun GridKernelCard(
+    key: String,
+    data: Map<String, String>,
+    history: List<ModuleDataEntity>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val icon = ModuleRegistry.iconFor(key)
+    val name = ModuleRegistry.nameFor(key)
+    val primaryValue = data.values.firstOrNull() ?: ""
+    val color = getModuleColor(key)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(115.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = color.copy(alpha = 0.15f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = color)
+                    }
+                }
+                AutoResizedText(
+                    text = primaryValue,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (history.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(20.dp)) {
+                    Sparkline(
+                        points = extractPoints(key, history),
+                        modifier = Modifier.fillMaxSize(),
+                        color = color.copy(alpha = 0.6f),
+                        strokeWidth = 1.5.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PuzzleTileCard(
+    key: String,
+    data: Map<String, String>,
+    history: List<ModuleDataEntity>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val icon = ModuleRegistry.iconFor(key)
+    val name = ModuleRegistry.nameFor(key)
+    val primaryValue = data.values.firstOrNull() ?: ""
+    val color = getModuleColor(key)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(110.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = color.copy(alpha = 0.2f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = color)
+                    }
+                }
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            AutoResizedText(
+                text = primaryValue,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color
+            )
+
+            if (history.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+                    Sparkline(
+                        points = extractPoints(key, history),
+                        modifier = Modifier.fillMaxSize(),
+                        color = color.copy(alpha = 0.5f),
+                        strokeWidth = 1.2.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun extractDockWidgetData(
     key: String,
     dashData: Map<String, Map<String, String>>,
@@ -773,7 +1049,7 @@ fun KernelCard(
     history: List<ModuleDataEntity>,
     sysAccess: com.extensionbox.app.SystemAccess?,
     onClick: () -> Unit,
-    reorderableItemScope: ReorderableCollectionItemScope,
+    reorderableItemScope: ReorderableCollectionItemScope?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -794,15 +1070,17 @@ fun KernelCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                with(reorderableItemScope) {
-                    Icon(
-                        imageVector = Icons.Default.DragHandle,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp).draggableHandle(),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                    )
+                if (reorderableItemScope != null) {
+                    with(reorderableItemScope) {
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp).draggableHandle(),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
                 }
-                Spacer(Modifier.width(12.dp))
                 
                 Surface(
                     modifier = Modifier.size(40.dp),
