@@ -3,9 +3,17 @@ package com.extensionbox.app.modules
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.extensionbox.app.Fmt
 import com.extensionbox.app.Prefs
@@ -14,11 +22,22 @@ import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ui.components.SettingSlider
 import com.extensionbox.app.ui.components.SettingSwitch
 import kotlinx.coroutines.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.LinkedHashMap
-import kotlin.math.abs
+import java.text.SimpleDateFormat
+import java.util.*
+
+data class SpeedTestRecord(
+    val timestamp: Long,
+    val dateFormatted: String,
+    val networkType: String,
+    val pingMs: String,
+    val downloadSpeed: String,
+    val uploadSpeed: String
+)
 
 class SpeedTestModule : Module {
 
@@ -80,7 +99,6 @@ class SpeedTestModule : Module {
     }
 
     private companion object {
-        // Cloudflare's public speed-test endpoints: __down streams N random bytes, __up discards a POST body
         const val DOWN_URL = "https://speed.cloudflare.com/__down?bytes="
         const val UP_URL = "https://speed.cloudflare.com/__up"
         const val DOWN_BYTES = 10_000_000
@@ -98,26 +116,115 @@ class SpeedTestModule : Module {
             try {
                 val ping = measurePing()
                 val downBps = measureDownload()
-                // Upload is best-effort: a failed upload shouldn't discard a good ping/download result
                 val upBps = try { measureUpload() } catch (e: IOException) { 0L }
 
                 pingMs = ping
-                // Stored as kbit/s in 128-byte units so the existing `* 128` display code yields bytes/s
                 downKbps = downBps / 128
                 upKbps = upBps / 128
                 lastTestTime = System.currentTimeMillis()
                 ctx?.let { 
                     val count = Prefs.getInt(it, "spd_tests_today", 0)
                     Prefs.setInt(it, "spd_tests_today", count + 1)
+                    saveSpeedTestRecord(it, pingMs, downKbps, upKbps)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Failed test: keep the previous results and back off instead of retrying every tick
                 retryAfter = System.currentTimeMillis() + RETRY_BACKOFF_MS
             } finally {
                 testing = false
             }
+        }
+    }
+
+    private fun runOnDemandTest(
+        context: Context,
+        onProgress: (stage: String, ping: Long, downKbps: Long, upKbps: Long) -> Unit
+    ) {
+        var p = 0L
+        var d = 0L
+        var u = 0L
+
+        try {
+            onProgress("Ping", p, d, u)
+            p = measurePing()
+            onProgress("Download", p, d, u)
+
+            val downBps = measureDownload()
+            d = downBps / 128
+            onProgress("Upload", p, d, u)
+
+            val upBps = try { measureUpload() } catch (e: Exception) { 0L }
+            u = upBps / 128
+
+            pingMs = p
+            downKbps = d
+            upKbps = u
+            lastTestTime = System.currentTimeMillis()
+
+            saveSpeedTestRecord(context, p, d, u)
+            onProgress("Completed", p, d, u)
+        } catch (e: Exception) {
+            onProgress("Error", p, d, u)
+        }
+    }
+
+    private fun saveSpeedTestRecord(context: Context, ping: Long, down: Long, up: Long) {
+        try {
+            val historyJson = Prefs.getString(context, "speedtest_results_history", "[]") ?: "[]"
+            val array = JSONArray(historyJson)
+            val now = System.currentTimeMillis()
+            val sdf = SimpleDateFormat("MMM dd, yyyy, hh:mm a", Locale.US)
+
+            val obj = JSONObject()
+            obj.put("timestamp", now)
+            obj.put("dateFormatted", sdf.format(Date(now)))
+            obj.put("networkType", getNetworkName(context))
+            obj.put("pingMs", "${ping}ms")
+            obj.put("downloadSpeed", Fmt.speed(down * 128))
+            obj.put("uploadSpeed", Fmt.speed(up * 128))
+
+            val newArray = JSONArray()
+            newArray.put(obj)
+            for (i in 0 until array.length().coerceAtMost(25)) {
+                newArray.put(array.get(i))
+            }
+            Prefs.setString(context, "speedtest_results_history", newArray.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun parseSpeedTestHistory(json: String): List<SpeedTestRecord> {
+        val list = mutableListOf<SpeedTestRecord>()
+        try {
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    SpeedTestRecord(
+                        timestamp = obj.optLong("timestamp", 0L),
+                        dateFormatted = obj.optString("dateFormatted", "Unknown Date"),
+                        networkType = obj.optString("networkType", "Network"),
+                        pingMs = obj.optString("pingMs", "--"),
+                        downloadSpeed = obj.optString("downloadSpeed", "--"),
+                        uploadSpeed = obj.optString("uploadSpeed", "--")
+                    )
+                )
+            }
+        } catch (e: Exception) {}
+        return list
+    }
+
+    private fun getNetworkName(c: Context): String {
+        val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val net = cm.activeNetwork ?: return "Offline"
+        val caps = cm.getNetworkCapabilities(net) ?: return "Unknown"
+        return when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi Network"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular (Mobile Data)"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+            else -> "Active Connection"
         }
     }
 
@@ -130,10 +237,6 @@ class SpeedTestModule : Module {
         return conn
     }
 
-    /**
-     * Round-trip time in ms. The first request pays for DNS + TLS and only warms the connection;
-     * the reported value is the best of the following requests, which reuse it.
-     */
     private fun measurePing(): Long {
         var best = Long.MAX_VALUE
         repeat(PING_SAMPLES + 1) { i ->
@@ -147,7 +250,6 @@ class SpeedTestModule : Module {
         return best
     }
 
-    /** Throughput in bytes/s, timed from the first received chunk so connection setup isn't counted. */
     private fun measureDownload(): Long {
         val conn = openConnection(DOWN_URL + DOWN_BYTES)
         try {
@@ -160,7 +262,7 @@ class SpeedTestModule : Module {
                     val n = input.read(buf)
                     if (n < 0) break
                     if (startNs == 0L) {
-                        startNs = System.nanoTime() // the first chunk only starts the clock
+                        startNs = System.nanoTime()
                     } else {
                         total += n
                         if (System.nanoTime() - startNs >= PHASE_MAX_MS * 1_000_000L) break
@@ -175,16 +277,15 @@ class SpeedTestModule : Module {
         }
     }
 
-    /** Upload throughput in bytes/s. Timed until the server has answered, i.e. consumed the whole body. */
     private fun measureUpload(): Long {
-        val payload = ByteArray(UP_BYTES).also { java.util.Random().nextBytes(it) }
+        val payload = ByteArray(UP_BYTES).also { Random().nextBytes(it) }
         val conn = openConnection(UP_URL)
         try {
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setFixedLengthStreamingMode(payload.size)
             conn.setRequestProperty("Content-Type", "application/octet-stream")
-            conn.connect() // keep TCP + TLS setup out of the timing
+            conn.connect()
             val t0 = System.nanoTime()
             conn.outputStream.use { it.write(payload) }
             val code = conn.responseCode
@@ -232,6 +333,186 @@ class SpeedTestModule : Module {
         if (upKbps > 0) d["speedtest.upload"] = Fmt.speed(upKbps * 128)
         d["speedtest.ping"] = "${pingMs}ms"
         return d
+    }
+
+    @androidx.compose.runtime.Composable
+    override fun dashboardContent(ctx: Context, sys: SystemAccess) {
+        composableContent(ctx, sys)
+    }
+
+    @androidx.compose.runtime.Composable
+    override fun composableContent(ctx: Context, sys: SystemAccess) {
+        val scope = rememberCoroutineScope()
+        var isTestRunning by remember { mutableStateOf(false) }
+        var currentPing by remember { mutableLongStateOf(pingMs) }
+        var currentDown by remember { mutableLongStateOf(downKbps) }
+        var currentUp by remember { mutableLongStateOf(upKbps) }
+        var testStage by remember { mutableStateOf("Idle") }
+
+        var historyJson by remember {
+            mutableStateOf(Prefs.getString(ctx, "speedtest_results_history", "[]") ?: "[]")
+        }
+        val historyList = remember(historyJson, isTestRunning) {
+            parseSpeedTestHistory(historyJson)
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // --- Main Gauge & Test Button ---
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = if (isTestRunning) "Stage: $testStage..." else "Speed Test",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // Live Gauge values
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        MetricGaugeItem("PING", if (currentPing > 0) "${currentPing}ms" else "--", MaterialTheme.colorScheme.tertiary)
+                        MetricGaugeItem("DOWNLOAD", Fmt.speed(currentDown * 128), MaterialTheme.colorScheme.primary)
+                        MetricGaugeItem("UPLOAD", Fmt.speed(currentUp * 128), MaterialTheme.colorScheme.secondary)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (!isTestRunning) {
+                                isTestRunning = true
+                                testStage = "Measuring Ping"
+                                scope.launch(Dispatchers.IO) {
+                                    runOnDemandTest(ctx) { stage, p, d, u ->
+                                        testStage = stage
+                                        currentPing = p
+                                        currentDown = d
+                                        currentUp = u
+                                    }
+                                    isTestRunning = false
+                                    historyJson = Prefs.getString(ctx, "speedtest_results_history", "[]") ?: "[]"
+                                }
+                            }
+                        },
+                        enabled = !isTestRunning,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        if (isTestRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("TESTING SPEED...")
+                        } else {
+                            Icon(Icons.Default.Speed, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("START SPEED TEST")
+                        }
+                    }
+                }
+            }
+
+            // --- Previous Test Results History ---
+            if (historyList.isNotEmpty()) {
+                Text(
+                    text = "Previous Test Results",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    historyList.forEach { record ->
+                        var expanded by remember { mutableStateOf(false) }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = record.dateFormatted,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = record.networkType,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Text(
+                                        text = record.downloadSpeed,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+
+                                    Icon(
+                                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = "Expand",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
+
+                                if (expanded) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        DetailColumn("Ping Latency", record.pingMs)
+                                        DetailColumn("Download", record.downloadSpeed)
+                                        DetailColumn("Upload", record.uploadSpeed)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun MetricGaugeItem(label: String, value: String, color: Color) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = color)
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun DetailColumn(label: String, value: String) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
     }
 
     @androidx.compose.runtime.Composable

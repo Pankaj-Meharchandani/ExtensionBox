@@ -162,7 +162,12 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        viewModel.updateOrder(from.index, to.index)
+        val headerCount = 2
+        val fromIdx = from.index - headerCount
+        val toIdx = to.index - headerCount
+        if (fromIdx >= 0 && toIdx >= 0) {
+            viewModel.updateOrder(fromIdx, toIdx)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {

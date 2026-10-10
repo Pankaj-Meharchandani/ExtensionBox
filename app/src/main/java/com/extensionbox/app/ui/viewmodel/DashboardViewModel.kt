@@ -52,8 +52,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun updateVisibleModules() {
         val all = ModuleRegistry.getModules()
-        val sorted = all.sortedByDescending { it.priority() }
-        _visibleModules.value = sorted.filter { Prefs.isModuleEnabled(context, it.key(), it.defaultEnabled()) }
+        val enabled = all.filter { Prefs.isModuleEnabled(context, it.key(), it.defaultEnabled()) }
+        val savedOrderStr = Prefs.getString(context, "dash_module_order", null)
+        val sorted = if (!savedOrderStr.isNullOrBlank()) {
+            val orderList = savedOrderStr.split(",").map { it.trim() }
+            enabled.sortedBy { m ->
+                val idx = orderList.indexOf(m.key())
+                if (idx >= 0) idx else 1000 - m.priority()
+            }
+        } else {
+            enabled.sortedByDescending { it.priority() }
+        }
+        _visibleModules.value = sorted
     }
 
     fun updateOrder(fromIndex: Int, toIndex: Int) {
@@ -62,6 +72,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             val item = current.removeAt(fromIndex)
             current.add(toIndex, item)
             _visibleModules.value = current
+            val newOrderKeys = current.map { it.key() }
+            Prefs.setString(context, "dash_module_order", newOrderKeys.joinToString(","))
         }
     }
 
