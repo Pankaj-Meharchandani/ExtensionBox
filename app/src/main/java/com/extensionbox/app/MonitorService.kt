@@ -25,7 +25,6 @@ class MonitorService : Service() {
     companion object {
         const val ACTION_STOP = "com.extensionbox.STOP"
         const val ACTION_RESET = "com.extensionbox.RESET"
-        const val ACTION_HABIT_INCREMENT = "com.extensionbox.app.HABIT_INCREMENT"
         private const val MONITOR_CH = "ebox_monitor"
         private const val ALERT_CH = "ebox_alerts"
         private const val NOTIF_ID = 1001
@@ -73,9 +72,6 @@ class MonitorService : Service() {
         }
     }
 
-    fun getHabitModule(): HabitTrackerModule? {
-        return if (initialized) modules.filterIsInstance<HabitTrackerModule>().firstOrNull() else null
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -111,7 +107,6 @@ class MonitorService : Service() {
                 UptimeModule(),
                 StepModule(),
                 SpeedTestModule(),
-                HabitTrackerModule(),
                 PrivacyModule()
             )
             
@@ -170,9 +165,6 @@ class MonitorService : Service() {
                     while (!initialized) delay(100)
                     resetAllModules()
                 }
-            }
-            ACTION_HABIT_INCREMENT -> {
-                getHabitModule()?.increment()
             }
         }
         return START_STICKY
@@ -572,7 +564,6 @@ class MonitorService : Service() {
         val unlocks = Prefs.getInt(this, "ulk_today", 0)
         val screenMs = Prefs.getLong(this, "scr_on_acc", 0L)
         val steps = Prefs.getLong(this, "stp_today", 0L)
-        val habs = Prefs.getInt(this, "hab_today", 0)
 
         val screenMin = (screenMs / 60000).toInt()
         val screenH = screenMin / 60
@@ -582,7 +573,6 @@ class MonitorService : Service() {
         body.append("Screen: ${screenH}h ${screenM}m")
         body.append(" • $unlocks unlocks")
         if (steps > 0) body.append(" • $steps steps")
-        if (habs > 0) body.append(" • Habit Tracker: $habs")
 
         val ydUnlocks = Prefs.getInt(this, "ulk_yesterday", 0)
         if (ydUnlocks > 0) {

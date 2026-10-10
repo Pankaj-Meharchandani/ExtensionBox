@@ -238,7 +238,7 @@ fun AboutScreen() {
             AppCard {
                 DeveloperItem(
                     name = stringResource(id = R.string.suvojeet_sengupta),
-                    role = stringResource(id = R.string.lead_developer),
+                    role = stringResource(id = R.string.developer),
                     github = "https://github.com/suvojeet-sengupta",
                     onCli = { uriHandler.openUri(it) }
                 )

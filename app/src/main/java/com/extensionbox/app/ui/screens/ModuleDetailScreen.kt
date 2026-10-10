@@ -241,9 +241,8 @@ fun ModuleDetailScreen(
         }
 
         val hasSettings = module?.hasSettings() == true
-        val isHabit = moduleKey == "habit"
 
-        if (module != null && sysAccess != null && (hasSettings || isHabit)) {
+        if (module != null && sysAccess != null && hasSettings) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
@@ -261,25 +260,7 @@ fun ModuleDetailScreen(
                         )
                     }
                     
-                    if (hasSettings) {
-                        module.settingsContent(context, sysAccess)
-                    }
-                    
-                    if (isHabit) {
-                        Button(
-                            onClick = {
-                                val intent = Intent(context, MonitorService::class.java)
-                                    .setAction(MonitorService.ACTION_HABIT_INCREMENT)
-                                context.startService(intent)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(id = R.string.log_action))
-                        }
-                    }
+                    module.settingsContent(context, sysAccess)
                 }
             }
         }

@@ -32,7 +32,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
     class UptimeWidgetProvider : ModuleWidgetProvider()
     class StepWidgetProvider : ModuleWidgetProvider()
     class SpeedTestWidgetProvider : ModuleWidgetProvider()
-    class HabitWidgetProvider : ModuleWidgetProvider()
     class AllInOneWidgetProvider : ModuleWidgetProvider()
 
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, widgetIds: IntArray) {
@@ -59,7 +58,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
                 "UptimeWidgetProvider" -> "uptime"
                 "StepWidgetProvider" -> "steps"
                 "SpeedTestWidgetProvider" -> "speedtest"
-                "HabitWidgetProvider" -> "habit"
                 "AllInOneWidgetProvider" -> "all_in_one"
                 else -> "battery"
             }
@@ -147,7 +145,6 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
                 UptimeWidgetProvider::class.java,
                 StepWidgetProvider::class.java,
                 SpeedTestWidgetProvider::class.java,
-                HabitWidgetProvider::class.java,
                 AllInOneWidgetProvider::class.java
             )
 

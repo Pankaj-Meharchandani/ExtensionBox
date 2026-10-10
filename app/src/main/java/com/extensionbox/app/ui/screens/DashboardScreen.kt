@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.launch
@@ -45,6 +47,7 @@ import com.extensionbox.app.ui.viewmodel.DashboardViewModel
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import java.util.Locale
 
 data class DockWidgetInfo(
     val key: String,
@@ -149,7 +152,7 @@ fun SystemPulseHero(
     onModuleClick: (String) -> Unit
 ) {
     var dockKeysStr by remember {
-        mutableStateOf(Prefs.getString(context, "top_dock_widgets", "battery,cpu,thermal") ?: "battery,cpu,thermal")
+        mutableStateOf(Prefs.getString(context, "top_dock_widgets", "sleep,steps,battery") ?: "sleep,steps,battery")
     }
     val dockKeys = remember(dockKeysStr) {
         dockKeysStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -161,114 +164,132 @@ fun SystemPulseHero(
     val rippleAlpha = remember { Animatable(0f) }
     val primaryColor = MaterialTheme.colorScheme.primary
 
-    val widgetColors = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.secondary,
-        MaterialTheme.colorScheme.tertiary,
-        MaterialTheme.colorScheme.error,
-        MaterialTheme.colorScheme.outline
+    val dockWidgetColors = listOf(
+        Color(0xFF6C72FF), // Purple/Indigo for Left
+        Color(0xFF00A3FF), // Electric Blue for Center Ring
+        Color(0xFFFFB800), // Gold/Orange for Right
+        Color(0xFF00E676), // Green for extra
+        Color(0xFFFF2D55)  // Red/Pink for extra
     )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+        color = Color(0xFF13171F),
         tonalElevation = 4.dp
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(
-                            text = if (isRunning) stringResource(id = R.string.system_pulse) else stringResource(id = R.string.system_idle),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = if (isRunning) stringResource(id = R.string.all_systems_operational) else stringResource(id = R.string.engine_paused),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                // Header with Status and Pen Edit Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(
+                                text = if (isRunning) stringResource(id = R.string.system_pulse) else stringResource(id = R.string.system_idle),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isRunning) Color(0xFF00A3FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (isRunning) stringResource(id = R.string.all_systems_operational) else stringResource(id = R.string.engine_paused),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
-                    Spacer(Modifier.width(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Start/Stop engine toggle
+                        Box(contentAlignment = Alignment.Center) {
+                            Canvas(modifier = Modifier.size(64.dp)) {
+                                val radius = size.minDimension / 2 * rippleScale.value
+                                drawCircle(
+                                    color = primaryColor.copy(alpha = rippleAlpha.value),
+                                    radius = radius,
+                                    style = Stroke(width = 3.dp.toPx())
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (isRunning) {
+                                        val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
+                                        context.startService(intent)
+                                    } else {
+                                        val intent = Intent(context, MonitorService::class.java)
+                                        ContextCompat.startForegroundService(context, intent)
+                                    }
+                                    rippleScope.launch {
+                                        rippleScale.snapTo(0f)
+                                        rippleAlpha.snapTo(0.8f)
+                                        launch { rippleScale.animateTo(1.8f, tween(600, easing = FastOutSlowInEasing)) }
+                                        rippleAlpha.animateTo(0f, tween(600, easing = FastOutSlowInEasing))
+                                    }
+                                },
+                                modifier = Modifier.size(38.dp).background(
+                                    if (isRunning) Color(0xFF00A3FF).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    CircleShape
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = if (isRunning) Color(0xFF00A3FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
-                    IconButton(
-                        onClick = { showCustomizeDialog = true },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = stringResource(id = R.string.customize_top_dock),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Spacer(Modifier.width(8.dp))
+
+                        // Edit Pencil Icon
+                        IconButton(
+                            onClick = { showCustomizeDialog = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(id = R.string.customize_top_dock),
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
 
-                Box(contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(96.dp)) {
-                        val radius = size.minDimension / 2 * rippleScale.value
-                        drawCircle(
-                            color = primaryColor.copy(alpha = rippleAlpha.value),
-                            radius = radius,
-                            style = Stroke(width = 3.dp.toPx())
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            if (isRunning) {
-                                val intent = Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_STOP)
-                                context.startService(intent)
-                            } else {
-                                val intent = Intent(context, MonitorService::class.java)
-                                ContextCompat.startForegroundService(context, intent)
-                            }
-                            rippleScope.launch {
-                                rippleScale.snapTo(0f)
-                                rippleAlpha.snapTo(0.8f)
-                                launch { rippleScale.animateTo(1.8f, tween(600, easing = FastOutSlowInEasing)) }
-                                rippleAlpha.animateTo(0f, tween(600, easing = FastOutSlowInEasing))
-                            }
-                        },
-                        modifier = Modifier.size(48.dp).background(
-                            if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            CircleShape
-                        )
-                    ) {
-                        Icon(
-                            imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Spacer(Modifier.height(16.dp))
+
+                // Concentric Arc Gauges Row
+                val dockWidgetInfos = remember(dockKeys, dashData) {
+                    dockKeys.map { extractDockWidgetData(it, dashData, context) }
                 }
+
+                ConcentricArcDock(
+                    dockWidgets = dockWidgetInfos,
+                    colors = dockWidgetColors,
+                    onModuleClick = onModuleClick,
+                    onEditClick = { showCustomizeDialog = true }
+                )
             }
 
-            Spacer(Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                dockKeys.forEachIndexed { idx, key ->
-                    val info = extractDockWidgetData(key, dashData, context)
-                    val color = widgetColors.getOrElse(idx) { widgetColors.first() }
-                    PulseIndicator(
-                        label = info.label,
-                        value = info.value,
-                        progress = info.progress,
-                        color = color,
-                        onClick = { onModuleClick(info.targetModuleKey) },
-                        onLongClick = { showCustomizeDialog = true }
+            // Bottom subtle reflection gradient line
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0xFF00A3FF).copy(alpha = 0.4f),
+                                Color.Transparent
+                            )
+                        )
                     )
-                }
-            }
+            )
         }
     }
 
@@ -284,6 +305,206 @@ fun SystemPulseHero(
                 dockKeysStr = joined
             }
         )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ConcentricArcDock(
+    dockWidgets: List<DockWidgetInfo>,
+    colors: List<Color>,
+    onModuleClick: (String) -> Unit,
+    onEditClick: () -> Unit
+) {
+    if (dockWidgets.isEmpty()) return
+
+    val centerIdx = if (dockWidgets.size >= 3) 1 else 0
+    val centerWidget = dockWidgets.getOrNull(centerIdx) ?: dockWidgets.first()
+    val leftWidget = if (dockWidgets.size >= 2) dockWidgets.getOrNull(0) else null
+    val rightWidget = if (dockWidgets.size >= 3) dockWidgets.getOrNull(2) else if (dockWidgets.size == 2) dockWidgets.getOrNull(1) else null
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Flanking Arc Widget
+        if (leftWidget != null && leftWidget != centerWidget) {
+            val leftColor = colors.getOrElse(0) { Color(0xFF6C72FF) }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .combinedClickable(
+                        onClick = { onModuleClick(leftWidget.targetModuleKey) },
+                        onLongClick = onEditClick
+                    )
+                    .padding(6.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 10.dp.toPx()
+                        val diameter = size.minDimension - strokeWidth
+                        val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
+                        val arcSize = Size(diameter, diameter)
+
+                        drawArc(
+                            color = leftColor.copy(alpha = 0.15f),
+                            startAngle = 115f,
+                            sweepAngle = 130f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            color = leftColor,
+                            startAngle = 115f,
+                            sweepAngle = 130f * leftWidget.progress.coerceIn(0.05f, 1f),
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = leftWidget.value,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = leftColor
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = leftWidget.label.uppercase(Locale.US),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // Center Prominent Circle Widget
+        val centerColor = colors.getOrElse(1) { Color(0xFF00A3FF) }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .combinedClickable(
+                    onClick = { onModuleClick(centerWidget.targetModuleKey) },
+                    onLongClick = onEditClick
+                )
+                .padding(6.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(145.dp)) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 12.dp.toPx()
+                    val diameter = size.minDimension - strokeWidth
+                    val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
+                    val arcSize = Size(diameter, diameter)
+
+                    drawArc(
+                        color = centerColor.copy(alpha = 0.15f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth)
+                    )
+                    drawArc(
+                        color = centerColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * centerWidget.progress.coerceIn(0.05f, 1f),
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = centerWidget.value,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = centerColor
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = centerWidget.label.uppercase(Locale.US),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Right Flanking Arc Widget
+        if (rightWidget != null && rightWidget != centerWidget) {
+            val rightColor = colors.getOrElse(2) { Color(0xFFFFB800) }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .combinedClickable(
+                        onClick = { onModuleClick(rightWidget.targetModuleKey) },
+                        onLongClick = onEditClick
+                    )
+                    .padding(6.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 10.dp.toPx()
+                        val diameter = size.minDimension - strokeWidth
+                        val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
+                        val arcSize = Size(diameter, diameter)
+
+                        drawArc(
+                            color = rightColor.copy(alpha = 0.15f),
+                            startAngle = -65f,
+                            sweepAngle = 130f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            color = rightColor,
+                            startAngle = -65f,
+                            sweepAngle = 130f * rightWidget.progress.coerceIn(0.05f, 1f),
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = rightWidget.value,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = rightColor
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = rightWidget.label.uppercase(Locale.US),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -344,52 +565,6 @@ private fun extractDockWidgetData(
         else -> {
             DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", 0f, key)
         }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun PulseIndicator(
-    label: String,
-    value: String,
-    progress: Float,
-    color: Color,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .padding(8.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(60.dp)) {
-            CircularProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxSize().rotate(-90f),
-                strokeWidth = 5.dp,
-                color = color,
-                trackColor = color.copy(alpha = 0.1f),
-                strokeCap = StrokeCap.Round
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
