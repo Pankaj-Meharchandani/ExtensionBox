@@ -54,12 +54,11 @@ object Prefs {
     }
 
     fun getInt(c: Context, key: String, def: Int): Int = runBlocking {
-        val prefKey = intPreferencesKey(key)
-        c.dataStore.data.map { it[prefKey] ?: def }.first()
+        c.dataStore.data.map { it.number(key)?.toInt() ?: def }.first()
     }
 
     fun getIntFlow(c: Context, key: String, def: Int) = 
-        c.dataStore.data.map { it[intPreferencesKey(key)] ?: def }
+        c.dataStore.data.map { it.number(key)?.toInt() ?: def }
 
     fun setInt(c: Context, key: String, value: Int) = runBlocking {
         val prefKey = intPreferencesKey(key)
@@ -67,8 +66,7 @@ object Prefs {
     }
 
     fun getLong(c: Context, key: String, def: Long): Long = runBlocking {
-        val prefKey = longPreferencesKey(key)
-        c.dataStore.data.map { it[prefKey] ?: def }.first()
+        c.dataStore.data.map { it.number(key)?.toLong() ?: def }.first()
     }
 
     fun setLong(c: Context, key: String, value: Long) = runBlocking {
@@ -131,24 +129,69 @@ object Prefs {
         }
     }
 
-    fun importJson(c: Context, json: String) = runBlocking {
+    // --- Numeric type tolerance ---
+
+    /**
+     * Reads a numeric value regardless of whether it is stored as Int or Long.
+     * DataStore keys compare by name only, so a key written as Int (e.g. by an imported JSON file) and read
+     * as Long used to throw ClassCastException. Reading the raw value avoids that.
+     */
+    @Suppress("UNCHECKED_CAST", "CAST_NEVER_SUCCEEDS")
+    private fun Preferences.number(name: String): Number? =
+        this[intPreferencesKey(name) as Preferences.Key<Any>] as? Number
+
+    // --- Settings import ---
+
+    // Runtime state that must never be restored from a file (importing running=true while the service is stopped)
+    private val IMPORT_BLOCKED_KEYS = setOf("running")
+    private const val IMPORT_MAX_KEYS = 1000
+    private const val IMPORT_MAX_KEY_LEN = 128
+    private const val IMPORT_MAX_STRING_LEN = 10_000
+    private val IMPORT_RANGES = mapOf(
+        "data_retention_days" to (1L..30L),
+        "notif_refresh_ms" to (1000L..60000L)
+    )
+
+    /**
+     * Imports settings from JSON produced by the export button.
+     * Returns the number of values applied, or -1 if the text isn't valid JSON.
+     * Nothing is written unless the whole file parses.
+     */
+    fun importJson(c: Context, json: String): Int = runBlocking {
         try {
-            val jsonObject = JSONObject(json)
-            c.dataStore.edit { prefs ->
-                val keys = jsonObject.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    when (val value = jsonObject.get(key)) {
-                        is Boolean -> prefs[booleanPreferencesKey(key)] = value
-                        is Int -> prefs[intPreferencesKey(key)] = value
-                        is Long -> prefs[longPreferencesKey(key)] = value
-                        is Double -> prefs[doublePreferencesKey(key)] = value
-                        is String -> prefs[stringPreferencesKey(key)] = value
+            val obj = JSONObject(json)
+            val writes = mutableListOf<(MutablePreferences, Map<String, Any>) -> Unit>()
+            val names = obj.keys()
+            while (names.hasNext() && writes.size < IMPORT_MAX_KEYS) {
+                val key = names.next()
+                if (key.isBlank() || key.length > IMPORT_MAX_KEY_LEN || key in IMPORT_BLOCKED_KEYS) continue
+                when (val value = obj.get(key)) {
+                    is Boolean -> writes.add { p, _ -> p[booleanPreferencesKey(key)] = value }
+                    is Int, is Long -> {
+                        val raw = (value as Number).toLong()
+                        val num = IMPORT_RANGES[key]?.let { r -> raw.coerceIn(r.first, r.last) } ?: raw
+                        val isLong = value is Long
+                        writes.add { p, existing ->
+                            // Keep the numeric type the key already has so readers stay consistent
+                            if (isLong || existing[key] is Long) p[longPreferencesKey(key)] = num
+                            else p[intPreferencesKey(key)] = num.toInt()
+                        }
                     }
+                    is Double -> writes.add { p, _ -> p[doublePreferencesKey(key)] = value }
+                    is String -> if (value.length <= IMPORT_MAX_STRING_LEN) {
+                        writes.add { p, _ -> p[stringPreferencesKey(key)] = value }
+                    }
+                    // JSON null, arrays and nested objects aren't valid preference values: skipped
+                    else -> {}
                 }
             }
+            c.dataStore.edit { p ->
+                val existing = p.asMap().mapKeys { it.key.name }
+                writes.forEach { it(p, existing) }
+            }
+            writes.size
         } catch (e: Exception) {
-            e.printStackTrace()
+            -1
         }
     }
 }

@@ -14,6 +14,8 @@ import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ui.components.SettingSlider
 import com.extensionbox.app.ui.components.SettingSwitch
 import kotlinx.coroutines.*
+import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URL
 import java.util.LinkedHashMap
 import kotlin.math.abs
@@ -21,13 +23,17 @@ import kotlin.math.abs
 class SpeedTestModule : Module {
 
     private var ctx: Context? = null
-    private var running = false
-    private var testing = false
+    @Volatile private var running = false
+    @Volatile private var testing = false
+    @Volatile private var retryAfter = 0L
+
+    // Owned by the module so an in-flight test is cancelled when the module is stopped
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    private var downKbps = 0L
-    private var upKbps = 0L
-    private var pingMs = 0L
-    private var lastTestTime = 0L
+    @Volatile private var downKbps = 0L
+    @Volatile private var upKbps = 0L
+    @Volatile private var pingMs = 0L
+    @Volatile private var lastTestTime = 0L
 
     override fun key(): String = "speedtest"
     override fun name(): String = ctx?.getString(R.string.speed_test_module_name) ?: "Speed Test"
@@ -46,11 +52,12 @@ class SpeedTestModule : Module {
 
     override fun stop() {
         running = false
+        scope.coroutineContext[Job]?.cancelChildren()
     }
 
     override fun tick() {
         val c = ctx ?: return
-        if (testing) return
+        if (testing || System.currentTimeMillis() < retryAfter) return
 
         val auto = Prefs.getBool(c, "spd_auto_test", true)
         if (!auto) return
@@ -72,45 +79,121 @@ class SpeedTestModule : Module {
         runTest()
     }
 
+    private companion object {
+        // Cloudflare's public speed-test endpoints: __down streams N random bytes, __up discards a POST body
+        const val DOWN_URL = "https://speed.cloudflare.com/__down?bytes="
+        const val UP_URL = "https://speed.cloudflare.com/__up"
+        const val DOWN_BYTES = 10_000_000
+        const val UP_BYTES = 2_000_000
+        const val PING_SAMPLES = 3
+        const val PHASE_MAX_MS = 4_000L
+        const val CONNECT_TIMEOUT_MS = 5_000
+        const val READ_TIMEOUT_MS = 8_000
+        const val RETRY_BACKOFF_MS = 5 * 60 * 1000L
+    }
+
     private fun runTest() {
         testing = true
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             try {
-                // Very basic speed test logic - usually would use a dedicated library or multiple chunks
-                val start = System.currentTimeMillis()
-                val conn = URL("https://www.google.com").openConnection()
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
-                pingMs = System.currentTimeMillis() - start
-                
-                val input = conn.getInputStream()
-                val buffer = ByteArray(8192)
-                var bytesRead = 0
-                var totalRead = 0L
-                val testStart = System.currentTimeMillis()
-                
-                // Read for max 3 seconds or 5MB
-                while (System.currentTimeMillis() - testStart < 3000 && totalRead < 5 * 1024 * 1024) {
-                    bytesRead = input.read(buffer)
-                    if (bytesRead == -1) break
-                    totalRead += bytesRead
-                }
-                input.close()
-                
-                val duration = System.currentTimeMillis() - testStart
-                if (duration > 0) {
-                    downKbps = totalRead * 8 / duration // bits per ms = kbps
-                }
-                
+                val ping = measurePing()
+                val downBps = measureDownload()
+                // Upload is best-effort: a failed upload shouldn't discard a good ping/download result
+                val upBps = try { measureUpload() } catch (e: IOException) { 0L }
+
+                pingMs = ping
+                // Stored as kbit/s in 128-byte units so the existing `* 128` display code yields bytes/s
+                downKbps = downBps / 128
+                upKbps = upBps / 128
                 lastTestTime = System.currentTimeMillis()
                 ctx?.let { 
                     val count = Prefs.getInt(it, "spd_tests_today", 0)
                     Prefs.setInt(it, "spd_tests_today", count + 1)
                 }
-            } catch (ignored: Exception) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Failed test: keep the previous results and back off instead of retrying every tick
+                retryAfter = System.currentTimeMillis() + RETRY_BACKOFF_MS
             } finally {
                 testing = false
             }
+        }
+    }
+
+    private fun openConnection(url: String): HttpURLConnection {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = CONNECT_TIMEOUT_MS
+        conn.readTimeout = READ_TIMEOUT_MS
+        conn.useCaches = false
+        conn.setRequestProperty("Cache-Control", "no-cache")
+        return conn
+    }
+
+    /**
+     * Round-trip time in ms. The first request pays for DNS + TLS and only warms the connection;
+     * the reported value is the best of the following requests, which reuse it.
+     */
+    private fun measurePing(): Long {
+        var best = Long.MAX_VALUE
+        repeat(PING_SAMPLES + 1) { i ->
+            val conn = openConnection(DOWN_URL + "0")
+            val t0 = System.nanoTime()
+            if (conn.responseCode !in 200..299) throw IOException("HTTP ${conn.responseCode}")
+            conn.inputStream.use { it.readBytes() }
+            val ms = (System.nanoTime() - t0) / 1_000_000L
+            if (i > 0 && ms < best) best = ms
+        }
+        return best
+    }
+
+    /** Throughput in bytes/s, timed from the first received chunk so connection setup isn't counted. */
+    private fun measureDownload(): Long {
+        val conn = openConnection(DOWN_URL + DOWN_BYTES)
+        try {
+            if (conn.responseCode !in 200..299) throw IOException("HTTP ${conn.responseCode}")
+            val buf = ByteArray(32 * 1024)
+            var total = 0L
+            var startNs = 0L
+            conn.inputStream.use { input ->
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    if (startNs == 0L) {
+                        startNs = System.nanoTime() // the first chunk only starts the clock
+                    } else {
+                        total += n
+                        if (System.nanoTime() - startNs >= PHASE_MAX_MS * 1_000_000L) break
+                    }
+                }
+            }
+            val elapsedNs = System.nanoTime() - startNs
+            if (startNs == 0L || total <= 0L || elapsedNs <= 0L) throw IOException("No data received")
+            return total * 1_000_000_000L / elapsedNs
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** Upload throughput in bytes/s. Timed until the server has answered, i.e. consumed the whole body. */
+    private fun measureUpload(): Long {
+        val payload = ByteArray(UP_BYTES).also { java.util.Random().nextBytes(it) }
+        val conn = openConnection(UP_URL)
+        try {
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setFixedLengthStreamingMode(payload.size)
+            conn.setRequestProperty("Content-Type", "application/octet-stream")
+            conn.connect() // keep TCP + TLS setup out of the timing
+            val t0 = System.nanoTime()
+            conn.outputStream.use { it.write(payload) }
+            val code = conn.responseCode
+            val elapsedNs = System.nanoTime() - t0
+            if (code !in 200..299) throw IOException("HTTP $code")
+            if (elapsedNs <= 0L) throw IOException("Invalid timing")
+            return payload.size * 1_000_000_000L / elapsedNs
+        } finally {
+            conn.disconnect()
         }
     }
 

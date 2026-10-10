@@ -1,5 +1,6 @@
 package com.extensionbox.app.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -29,10 +30,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.extensionbox.app.MonitorService
 import com.extensionbox.app.Prefs
 import com.extensionbox.app.R
 import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ThemeHelper
+import com.extensionbox.app.db.AppDatabase
 import com.extensionbox.app.ui.components.AppCard
 import org.json.JSONObject
 import rikka.shizuku.Shizuku
@@ -95,6 +98,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     // Reactive System Access
     var sysAccess by remember { mutableStateOf<SystemAccess?>(null) }
     val scope = rememberCoroutineScope()
+    var showResetDialog by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         val newAccess = withContext(Dispatchers.IO) {
@@ -136,8 +140,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             try {
                 context.contentResolver.openInputStream(it)?.use { `is` ->
                     val json = BufferedReader(InputStreamReader(`is`)).readText()
-                    Prefs.importJson(context, json)
-                    Toast.makeText(context, R.string.settings_imported, Toast.LENGTH_SHORT).show()
+                    val applied = Prefs.importJson(context, json)
+                    Toast.makeText(
+                        context,
+                        if (applied >= 0) R.string.settings_imported else R.string.import_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(context, R.string.import_failed, Toast.LENGTH_SHORT).show()
@@ -462,16 +470,56 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     summary = stringResource(id = R.string.clear_all_stats_and_preferences),
                     icon = Icons.Default.DeleteSweep,
                     color = MaterialTheme.colorScheme.error,
-                    onClick = {
-                        Prefs.clearAll(context)
-                        Toast.makeText(context, R.string.data_cleared, Toast.LENGTH_SHORT).show()
-                    }
+                    onClick = { showResetDialog = true }
                 )
             }
         }
 
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = { Text(stringResource(id = R.string.reset_all_data)) },
+                text = { Text(stringResource(id = R.string.reset_all_data_confirm)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showResetDialog = false
+                        scope.launch { resetAllData(context) }
+                    }) {
+                        Text(
+                            stringResource(id = R.string.reset_all_data_action),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text(stringResource(id = R.string.dialog_cancel))
+                    }
+                }
+            )
+        }
+
         Spacer(modifier = Modifier.height(100.dp))
     }
+}
+
+/**
+ * Wipes preferences and stored history, then tells a running service to drop its in-memory state.
+ * The "running" flag is preserved: clearing it made the dashboard report the service as stopped while it was still alive.
+ */
+private suspend fun resetAllData(context: Context) {
+    val wasRunning = Prefs.isRunning(context)
+    withContext(Dispatchers.IO) {
+        AppDatabase.getDatabase(context).clearAllTables()
+        Prefs.clearAll(context)
+        Prefs.setRunning(context, wasRunning)
+    }
+    if (wasRunning) {
+        context.startService(
+            Intent(context, MonitorService::class.java).setAction(MonitorService.ACTION_RESET)
+        )
+    }
+    Toast.makeText(context, R.string.data_cleared, Toast.LENGTH_SHORT).show()
 }
 
 @Composable

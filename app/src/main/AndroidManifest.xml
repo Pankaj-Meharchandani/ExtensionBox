@@ -43,6 +43,10 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" xmlns:tools="http://schemas.android.com/tools" tools:ignore="ProtectedPermissions" />
+    <!-- Debloater needs to list every installed package, including system packages without a launcher icon.
+         Without this, Android 11+ package visibility hides most of them. (Google Play restricts this permission;
+         it is fine for GitHub/F-Droid distribution.) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" xmlns:tools="http://schemas.android.com/tools" tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:name=".ExtensionBoxApp"

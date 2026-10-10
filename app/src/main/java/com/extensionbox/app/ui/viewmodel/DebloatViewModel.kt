@@ -8,6 +8,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.net.URL
 import com.extensionbox.app.ui.screens.AppCategory
@@ -68,9 +70,12 @@ class DebloatViewModel : ViewModel() {
         "com.spotify.music"
     )
 
+    // Completes when the UAD list has been fetched (or failed); app categories depend on it
+    private var uadJob: Job? = null
+
     init {
         checkCapabilities()
-        fetchUadList()
+        uadJob = fetchUadList()
     }
 
     private fun checkCapabilities() {
@@ -80,8 +85,8 @@ class DebloatViewModel : ViewModel() {
         }
     }
 
-    private fun fetchUadList() {
-        viewModelScope.launch(Dispatchers.IO) {
+    private fun fetchUadList(): Job {
+        return viewModelScope.launch(Dispatchers.IO) {
             try {
                 val uadUrl = "https://raw.githubusercontent.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/refs/heads/main/resources/assets/uad_lists.json"
                 val text = URL(uadUrl).readText()
@@ -104,7 +109,10 @@ class DebloatViewModel : ViewModel() {
     }
 
     fun loadApps(packageManager: PackageManager) {
-        viewModelScope.launch {
+        // IO dispatcher: with QUERY_ALL_PACKAGES this lists hundreds of packages and loads every label
+        viewModelScope.launch(Dispatchers.IO) {
+            // Wait briefly for the UAD list so system apps aren't all categorised EXTREME by a race
+            withTimeoutOrNull(8_000L) { uadJob?.join() }
             val installedApps = packageManager.getInstalledPackages(PackageManager.GET_META_DATA)
             val appList = installedApps.map { packageInfo ->
                 val appInfo = packageInfo.applicationInfo!!
