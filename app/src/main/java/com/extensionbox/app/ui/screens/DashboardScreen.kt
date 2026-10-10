@@ -8,6 +8,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -31,9 +33,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.extensionbox.app.MonitorService
@@ -52,7 +58,8 @@ import java.util.Locale
 data class DockWidgetInfo(
     val key: String,
     val label: String,
-    val value: String,
+    val valueNumber: String,
+    val unit: String,
     val progress: Float,
     val targetModuleKey: String
 )
@@ -71,23 +78,69 @@ private val ALL_DOCK_WIDGET_OPTIONS = listOf(
     "uptime" to "Device Uptime"
 )
 
+@Composable
 fun getModuleColor(key: String): Color {
+    val isLight = !isSystemInDarkTheme() && MaterialTheme.colorScheme.surface.luminance() > 0.5f
     return when (key) {
-        "battery" -> Color(0xFF00E676)   // Lime/Green
-        "cpu" -> Color(0xFF00B0FF)       // Electric Cyan
-        "ram" -> Color(0xFFAB47BC)       // Violet/Purple
-        "thermal" -> Color(0xFFFF6D00)   // Deep Orange
-        "storage" -> Color(0xFFFFD600)   // Gold/Yellow
-        "data" -> Color(0xFF1DE9B6)      // Teal/Turquoise
-        "steps" -> Color(0xFF2979FF)     // Electric Blue
-        "sleep" -> Color(0xFF7E57C2)     // Deep Purple/Indigo
-        "unlock" -> Color(0xFFFF4081)    // Bright Pink
-        "network" -> Color(0xFF00E5FF)   // Light Cyan
-        "uptime" -> Color(0xFF3F51B5)    // Indigo
-        "speedtest" -> Color(0xFFFF9100) // Orange
-        "privacy" -> Color(0xFF3D5AFF)   // Shield Blue
-        else -> Color(0xFF00B0FF)
+        "battery" -> if (isLight) Color(0xFF008A4B) else Color(0xFF00E676)
+        "cpu" -> if (isLight) Color(0xFF0088CC) else Color(0xFF00B0FF)
+        "ram" -> if (isLight) Color(0xFF8E24AA) else Color(0xFFAB47BC)
+        "thermal" -> if (isLight) Color(0xFFE65100) else Color(0xFFFF6D00)
+        "storage" -> if (isLight) Color(0xFFF57F17) else Color(0xFFFFD600)
+        "data" -> if (isLight) Color(0xFF00897B) else Color(0xFF1DE9B6)
+        "steps" -> if (isLight) Color(0xFF1565C0) else Color(0xFF2979FF)
+        "sleep" -> if (isLight) Color(0xFF512DA8) else Color(0xFF7E57C2)
+        "unlock" -> if (isLight) Color(0xFFC2185B) else Color(0xFFFF4081)
+        "network" -> if (isLight) Color(0xFF00838F) else Color(0xFF00E5FF)
+        "uptime" -> if (isLight) Color(0xFF283593) else Color(0xFF3F51B5)
+        "speedtest" -> if (isLight) Color(0xFFEF6C00) else Color(0xFFFF9100)
+        "privacy" -> if (isLight) Color(0xFF283593) else Color(0xFF3D5AFF)
+        else -> MaterialTheme.colorScheme.primary
     }
+}
+
+@Composable
+fun AutoResizedText(
+    text: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    textAlign: TextAlign? = null,
+    minFontSize: TextUnit = 8.sp,
+    maxLines: Int = 1
+) {
+    var resizedTextStyle by remember(text, style) { mutableStateOf(style) }
+    var shouldDraw by remember(text, style) { mutableStateOf(false) }
+
+    Text(
+        text = text,
+        color = color,
+        fontWeight = fontWeight,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        style = resizedTextStyle,
+        modifier = modifier.drawWithContent {
+            if (shouldDraw) {
+                drawContent()
+            }
+        },
+        onTextLayout = { result ->
+            if (result.didOverflowWidth || result.didOverflowHeight) {
+                if (resizedTextStyle.fontSize > minFontSize) {
+                    resizedTextStyle = resizedTextStyle.copy(
+                        fontSize = resizedTextStyle.fontSize * 0.88f
+                    )
+                } else {
+                    shouldDraw = true
+                }
+            } else {
+                shouldDraw = true
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -187,7 +240,7 @@ fun SystemPulseHero(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = Color(0xFF13171F),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
         tonalElevation = 4.dp
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -204,7 +257,7 @@ fun SystemPulseHero(
                                 text = if (isRunning) stringResource(id = R.string.system_pulse) else stringResource(id = R.string.system_idle),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isRunning) Color(0xFF00A3FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = if (isRunning) stringResource(id = R.string.all_systems_operational) else stringResource(id = R.string.engine_paused),
@@ -242,14 +295,14 @@ fun SystemPulseHero(
                                     }
                                 },
                                 modifier = Modifier.size(38.dp).background(
-                                    if (isRunning) Color(0xFF00A3FF).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                                     CircleShape
                                 )
                             ) {
                                 Icon(
                                     imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = null,
-                                    tint = if (isRunning) Color(0xFF00A3FF) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -264,7 +317,7 @@ fun SystemPulseHero(
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = stringResource(id = R.string.customize_top_dock),
-                                tint = Color.White.copy(alpha = 0.85f),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -295,7 +348,7 @@ fun SystemPulseHero(
                         Brush.horizontalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color(0xFF00A3FF).copy(alpha = 0.4f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
                                 Color.Transparent
                             )
                         )
@@ -354,7 +407,7 @@ fun ThreeCircleDock(
                     )
                     .padding(4.dp)
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(78.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(82.dp)) {
                     CircularProgressIndicator(
                         progress = { leftWidget.progress.coerceIn(0.05f, 1f) },
                         modifier = Modifier.fillMaxSize().rotate(-90f),
@@ -363,13 +416,27 @@ fun ThreeCircleDock(
                         trackColor = leftColor.copy(alpha = 0.15f),
                         strokeCap = StrokeCap.Round
                     )
-                    Text(
-                        text = leftWidget.value,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = leftColor,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        AutoResizedText(
+                            text = leftWidget.valueNumber,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = leftColor,
+                            textAlign = TextAlign.Center
+                        )
+                        if (leftWidget.unit.isNotEmpty()) {
+                            AutoResizedText(
+                                text = leftWidget.unit,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = leftColor.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -394,7 +461,7 @@ fun ThreeCircleDock(
                 )
                 .padding(4.dp)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(135.dp)) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(138.dp)) {
                 CircularProgressIndicator(
                     progress = { centerWidget.progress.coerceIn(0.05f, 1f) },
                     modifier = Modifier.fillMaxSize().rotate(-90f),
@@ -403,14 +470,26 @@ fun ThreeCircleDock(
                     trackColor = centerColor.copy(alpha = 0.15f),
                     strokeCap = StrokeCap.Round
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = centerWidget.value,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                ) {
+                    AutoResizedText(
+                        text = centerWidget.valueNumber,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Black,
                         color = centerColor,
                         textAlign = TextAlign.Center
                     )
+                    if (centerWidget.unit.isNotEmpty()) {
+                        AutoResizedText(
+                            text = centerWidget.unit,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = centerColor.copy(alpha = 0.85f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = centerWidget.label.uppercase(Locale.US),
@@ -436,7 +515,7 @@ fun ThreeCircleDock(
                     )
                     .padding(4.dp)
             ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(78.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(82.dp)) {
                     CircularProgressIndicator(
                         progress = { rightWidget.progress.coerceIn(0.05f, 1f) },
                         modifier = Modifier.fillMaxSize().rotate(-90f),
@@ -445,13 +524,27 @@ fun ThreeCircleDock(
                         trackColor = rightColor.copy(alpha = 0.15f),
                         strokeCap = StrokeCap.Round
                     )
-                    Text(
-                        text = rightWidget.value,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = rightColor,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        AutoResizedText(
+                            text = rightWidget.valueNumber,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = rightColor,
+                            textAlign = TextAlign.Center
+                        )
+                        if (rightWidget.unit.isNotEmpty()) {
+                            AutoResizedText(
+                                text = rightWidget.unit,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = rightColor.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -474,54 +567,62 @@ private fun extractDockWidgetData(
     return when (key) {
         "battery" -> {
             val lvl = dashData["battery"]?.get("battery.level")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("battery", context.getString(R.string.battery), "$lvl%", (lvl / 100f).coerceIn(0f, 1f), "battery")
+            DockWidgetInfo("battery", context.getString(R.string.battery), "$lvl", "%", (lvl / 100f).coerceIn(0f, 1f), "battery")
         }
         "cpu" -> {
             val usage = dashData["cpu"]?.get("cpu.usage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("cpu", context.getString(R.string.cpu_load), "$usage%", (usage / 100f).coerceIn(0f, 1f), "cpu")
+            DockWidgetInfo("cpu", context.getString(R.string.cpu_load), "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "cpu")
         }
         "ram" -> {
             val usage = dashData["ram"]?.get("ram.percentage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("ram", "RAM", "$usage%", (usage / 100f).coerceIn(0f, 1f), "ram")
+            DockWidgetInfo("ram", "RAM", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "ram")
         }
         "storage" -> {
             val usage = dashData["storage"]?.get("storage.percentage")?.removeSuffix("%")?.toFloatOrNull()?.toInt() ?: 0
-            DockWidgetInfo("storage", "Storage", "$usage%", (usage / 100f).coerceIn(0f, 1f), "storage")
+            DockWidgetInfo("storage", "Storage", "$usage", "%", (usage / 100f).coerceIn(0f, 1f), "storage")
         }
         "data" -> {
             val usageStr = dashData["data"]?.get("data.today_total") ?: "--"
-            DockWidgetInfo("data", "Data", usageStr, 0.5f, "data")
+            val num = usageStr.substringBefore(" ")
+            val unit = usageStr.substringAfter(" ", "")
+            DockWidgetInfo("data", "Data", num, unit, 0.5f, "data")
         }
         "steps" -> {
             val text = dashData["steps"]?.get("steps.today") ?: "--"
             val count = text.replace(",", "").toFloatOrNull() ?: 0f
-            DockWidgetInfo("steps", "Steps", text, (count / 10000f).coerceIn(0f, 1f), "steps")
+            DockWidgetInfo("steps", "Steps", text, "", (count / 10000f).coerceIn(0f, 1f), "steps")
         }
         "sleep" -> {
             val text = dashData["sleep"]?.get("sleep.deep_percentage") ?: "--"
             val pct = text.removeSuffix("%").toFloatOrNull() ?: 0f
-            DockWidgetInfo("sleep", "Sleep", text, (pct / 100f).coerceIn(0f, 1f), "sleep")
+            DockWidgetInfo("sleep", "Sleep", "${pct.toInt()}", "%", (pct / 100f).coerceIn(0f, 1f), "sleep")
         }
         "unlock" -> {
             val text = dashData["unlock"]?.get("unlock.today") ?: "--"
             val count = text.toFloatOrNull() ?: 0f
-            DockWidgetInfo("unlock", "Unlocks", text, (count / 50f).coerceIn(0f, 1f), "unlock")
+            DockWidgetInfo("unlock", "Unlocks", text, "", (count / 50f).coerceIn(0f, 1f), "unlock")
         }
         "network" -> {
             val speed = dashData["network"]?.get("net.download") ?: "--"
-            DockWidgetInfo("network", "Speed", speed, 0.5f, "network")
+            val num = speed.substringBefore(" ")
+            val unit = speed.substringAfter(" ", "")
+            DockWidgetInfo("network", "Speed", num, unit, 0.5f, "network")
         }
         "uptime" -> {
             val uptimeStr = dashData["uptime"]?.get("uptime.duration") ?: "--"
-            DockWidgetInfo("uptime", "Uptime", uptimeStr, 1.0f, "uptime")
+            val num = uptimeStr.substringBefore(" ")
+            val unit = uptimeStr.substringAfter(" ", "")
+            DockWidgetInfo("uptime", "Uptime", num, unit, 1.0f, "uptime")
         }
         "thermal" -> {
             val temp = dashData["battery"]?.get("battery.temp") ?: "--"
             val tVal = temp.removeSuffix("°C").removeSuffix("°F").toFloatOrNull() ?: 0f
-            DockWidgetInfo("thermal", context.getString(R.string.thermal), temp, (tVal / 50f).coerceIn(0f, 1f), "battery")
+            val num = if (temp.contains("°")) temp.substringBefore("°") else temp
+            val unit = if (temp.contains("°")) "°" + temp.substringAfter("°") else ""
+            DockWidgetInfo("thermal", context.getString(R.string.thermal), num, unit, (tVal / 50f).coerceIn(0f, 1f), "battery")
         }
         else -> {
-            DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", 0f, key)
+            DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", "", 0f, key)
         }
     }
 }
@@ -686,7 +787,14 @@ fun KernelCard(
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(text = primaryValue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = primaryValue,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 if (history.isNotEmpty()) {
