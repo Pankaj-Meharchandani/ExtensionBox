@@ -142,8 +142,8 @@ fun AboutScreen() {
             Surface(
                 modifier = Modifier.size(86.dp),
                 shape = RoundedCornerShape(26.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Image(
@@ -166,8 +166,8 @@ fun AboutScreen() {
 
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
             ) {
                 Text(
                     text = stringResource(id = R.string.version_name, BuildConfig.VERSION_NAME),
