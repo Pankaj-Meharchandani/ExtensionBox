@@ -18,7 +18,7 @@ object ModuleRegistry {
     private val ALL_MODULES = listOf(
         ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "Battery & Screen", "Battery health, power and screen usage", true),
         ModuleDef("screen_time", Icons.Rounded.Schedule, "Screen Time", "App usage, open counts & unlock analytics", true),
-        ModuleDef("app_usage", Icons.Rounded.Apps, "App Usage", "Time spent in each application", true),
+        ModuleDef("app_usage", Icons.Rounded.Apps, "App Usage", "Time spent in each application", false),
         ModuleDef("cpu", Icons.Rounded.Memory, "CPU", "CPU usage, frequency and temperature", true),
         ModuleDef("ram", Icons.Rounded.Memory, "RAM", "Memory status and running processes", true),
         ModuleDef("sleep", Icons.Rounded.Bedtime, "Device Sleep", "CPU sleep vs awake ratio", true),
@@ -33,7 +33,7 @@ object ModuleRegistry {
         ModuleDef("privacy", Icons.Rounded.Shield, "Privacy Dashboard", "Permission usage and force-revoke tools", false)
     )
 
-    private val HIDDEN_KEYS = emptySet<String>()
+    private val HIDDEN_KEYS = setOf("speedtest", "app_usage", "privacy")
     private val MODULES = ALL_MODULES.filter { it.key !in HIDDEN_KEYS }
 
     fun keyAt(i: Int): String = MODULES[i].key

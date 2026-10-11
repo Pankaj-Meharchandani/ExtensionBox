@@ -23,6 +23,8 @@ import com.extensionbox.app.Prefs
 import com.extensionbox.app.R
 import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.ui.components.SettingSlider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.*
 
 data class AppUsageInfo(
@@ -41,7 +43,7 @@ class AppUsageModule : Module {
     override fun key(): String = "app_usage"
     override fun name(): String = ctx?.getString(R.string.app_usage_module_name) ?: "App Usage"
     override fun description(): String = ctx?.getString(R.string.app_usage_module_description) ?: "Screen time, launches, average session & battery impact"
-    override fun defaultEnabled(): Boolean = true
+    override fun defaultEnabled(): Boolean = false
     override fun alive(): Boolean = running
     override fun priority(): Int = 22
     override fun hasSettings(): Boolean = true
@@ -303,6 +305,7 @@ class AppUsageModule : Module {
     @androidx.compose.runtime.Composable
     override fun composableContent(ctx: Context, sys: SystemAccess) {
         val hasPermission = remember { mutableStateOf(checkPermission(ctx)) }
+        var loaded by remember { mutableStateOf(false) }
         
         if (!hasPermission.value) {
             Button(
@@ -314,8 +317,23 @@ class AppUsageModule : Module {
                 Text(ctx.getString(R.string.app_usage_module_grant_usage_access))
             }
         } else {
+            LaunchedEffect(Unit) {
+                withContext(Dispatchers.IO) {
+                    start(ctx, sys)
+                }
+                loaded = true
+            }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                dashboardContent(ctx, sys)
+                if (loaded) {
+                    dashboardContent(ctx, sys)
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                }
             }
         }
     }
