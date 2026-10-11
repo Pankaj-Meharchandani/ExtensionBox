@@ -92,6 +92,9 @@ object Prefs {
         c.dataStore.data.map { it[prefKey] ?: def }.first()
     }
 
+    fun getStringFlow(c: Context, key: String, def: String?) =
+        c.dataStore.data.map { it[stringPreferencesKey(key)] ?: def }
+
     fun setString(c: Context, key: String, value: String?) = runBlocking {
         val prefKey = stringPreferencesKey(key)
         c.dataStore.edit { 

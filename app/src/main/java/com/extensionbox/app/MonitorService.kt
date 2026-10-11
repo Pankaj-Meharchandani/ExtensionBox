@@ -132,6 +132,17 @@ class MonitorService : Service() {
                     if (isEnabled && !m.alive()) {
                         m.start(this@MonitorService, sysAccess)
                         lastTickTime[m.key()] = 0L
+                        try {
+                            m.tick()
+                            val dp = m.dataPoints()
+                            moduleData[m.key()] = dp
+                            val entity = ModuleDataEntity(moduleKey = m.key(), data = dp)
+                            serviceScope.launch(Dispatchers.IO) {
+                                database.moduleDataDao().insert(entity)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     } else if (!isEnabled && m.alive()) {
                         m.stop()
                         moduleData.remove(m.key())

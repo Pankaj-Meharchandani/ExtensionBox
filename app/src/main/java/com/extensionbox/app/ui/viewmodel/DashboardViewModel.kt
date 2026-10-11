@@ -77,6 +77,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun updateOrderKeys(fromKey: String, toKey: String) {
+        val current = _visibleModules.value.toMutableList()
+        val fromIdx = current.indexOfFirst { it.key() == fromKey }
+        val toIdx = current.indexOfFirst { it.key() == toKey }
+        if (fromIdx >= 0 && toIdx >= 0) {
+            val item = current.removeAt(fromIdx)
+            current.add(toIdx, item)
+            _visibleModules.value = current
+            val newOrderKeys = current.map { it.key() }
+            Prefs.setString(context, "dash_module_order", newOrderKeys.joinToString(","))
+        }
+    }
+
     private fun observeData() {
         viewModelScope.launch {
             while (true) {
@@ -94,6 +107,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     val latest = database.moduleDataDao().getLatest(module.key())
                     if (latest != null) {
                         dataMap[module.key()] = latest.data
+                    } else {
+                        val memData = com.extensionbox.app.MonitorService.getModuleData(module.key())
+                        if (memData != null) {
+                            dataMap[module.key()] = memData
+                        }
                     }
                     val history = database.moduleDataDao().getHistoryList(module.key(), fifteenMinsAgo)
                     histMap[module.key()] = history
@@ -107,6 +125,42 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 delay(2000)
             }
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            updateVisibleModules()
+            fetchDataOnce()
+        }
+    }
+
+    private suspend fun fetchDataOnce() {
+        val enabledModules = ModuleRegistry.getModules().filter {
+            Prefs.isModuleEnabled(context, it.key(), it.defaultEnabled())
+        }
+        var count = 0
+        val dataMap = mutableMapOf<String, Map<String, String>>()
+        val histMap = mutableMapOf<String, List<ModuleDataEntity>>()
+        val fifteenMinsAgo = System.currentTimeMillis() - (15 * 60 * 1000)
+
+        for (module in enabledModules) {
+            if (module.alive()) count++
+            val latest = database.moduleDataDao().getLatest(module.key())
+            if (latest != null) {
+                dataMap[module.key()] = latest.data
+            } else {
+                val memData = com.extensionbox.app.MonitorService.getModuleData(module.key())
+                if (memData != null) {
+                    dataMap[module.key()] = memData
+                }
+            }
+            val history = database.moduleDataDao().getHistoryList(module.key(), fifteenMinsAgo)
+            histMap[module.key()] = history
+        }
+
+        _activeCount.value = count
+        _dashData.value = dataMap
+        _historyData.value = histMap
     }
 
     /** Downsampled history for the detail chart: one sample per [bucketMs] over the last [durationMs]. */

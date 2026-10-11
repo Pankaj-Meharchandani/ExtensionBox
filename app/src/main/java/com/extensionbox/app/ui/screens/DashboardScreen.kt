@@ -158,17 +158,27 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
     val visibleModules by viewModel.visibleModules.collectAsState()
     val sysAccess by viewModel.sysAccess.collectAsState()
 
+    val dockKeysStr by Prefs.getStringFlow(context, "top_dock_widgets", "battery,cpu,thermal")
+        .collectAsState(initial = Prefs.getString(context, "top_dock_widgets", "battery,cpu,thermal") ?: "battery,cpu,thermal")
+
+    val dockModuleKeys = remember(dockKeysStr) {
+        parseUniqueDockKeys(dockKeysStr ?: "battery,cpu,thermal").map { getDockTargetModuleKey(it) }.toSet()
+    }
+
+    val displayModules = remember(visibleModules, dockModuleKeys) {
+        visibleModules.filter { it.key() !in dockModuleKeys }
+    }
+
     var layoutStyle by remember {
         mutableStateOf(Prefs.getString(context, "notif_layout_style", "LIST") ?: "LIST")
     }
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val headerCount = 2
-        val fromIdx = from.index - headerCount
-        val toIdx = to.index - headerCount
-        if (fromIdx >= 0 && toIdx >= 0) {
-            viewModel.updateOrder(fromIdx, toIdx)
+        val fromKey = from.key as? String
+        val toKey = to.key as? String
+        if (fromKey != null && toKey != null) {
+            viewModel.updateOrderKeys(fromKey, toKey)
         }
     }
 
@@ -185,11 +195,12 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                     activeCount = activeCount,
                     dashData = dashData,
                     context = context,
+                    viewModel = viewModel,
                     onModuleClick = onModuleClick
                 )
             }
 
-            if (isRunning && visibleModules.isNotEmpty()) {
+            if (isRunning && displayModules.isNotEmpty()) {
                 item(key = "layout_switcher_bar") {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -242,7 +253,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                 }
             } else if (layoutStyle == "GRID") {
                 // --- 1. GRID MODE (2-Column Grid) ---
-                val validModules = visibleModules.filter { dashData.containsKey(it.key()) }
+                val validModules = displayModules
                 val pairs = validModules.chunked(2)
                 items(pairs, key = { pair -> pair.joinToString("-") { it.key() } }) { rowModules ->
                     Row(
@@ -267,7 +278,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                 }
             } else if (layoutStyle == "PUZZLE") {
                 // --- 2. PUZZLE MODE (Asymmetrical Bento Masonry) ---
-                val validModules = visibleModules.filter { dashData.containsKey(it.key()) }
+                val validModules = displayModules
                 var idx = 0
                 val puzzleItems = mutableListOf<@Composable () -> Unit>()
 
@@ -326,31 +337,59 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                 }
             } else {
                 // --- 3. LIST MODE (Default Vertical List with Drag Reorder) ---
-                items(visibleModules, key = { it.key() }) { module ->
+                items(displayModules, key = { it.key() }) { module ->
                     val key = module.key()
-                    val data = dashData[key]
-                    if (data != null) {
-                        ReorderableItem(reorderableState, key = key) { isDragging ->
-                            val elevation by animateDpAsState(if (isDragging) 12.dp else 0.dp, label = stringResource(id = R.string.elevation))
-                            
-                            KernelCard(
-                                key = key,
-                                data = data,
-                                history = historyData[key] ?: emptyList(),
-                                sysAccess = sysAccess,
-                                onClick = { onModuleClick(key) },
-                                reorderableItemScope = this,
-                                modifier = Modifier
-                                    .graphicsLayer {
-                                        this.shadowElevation = elevation.toPx()
-                                    }
-                            )
-                        }
+                    val data = dashData[key] ?: emptyMap()
+                    ReorderableItem(reorderableState, key = key) { isDragging ->
+                        val elevation by animateDpAsState(if (isDragging) 12.dp else 0.dp, label = stringResource(id = R.string.elevation))
+                        
+                        KernelCard(
+                            key = key,
+                            data = data,
+                            history = historyData[key] ?: emptyList(),
+                            sysAccess = sysAccess,
+                            onClick = { onModuleClick(key) },
+                            reorderableItemScope = this,
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    this.shadowElevation = elevation.toPx()
+                                }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+fun getDockTargetModuleKey(dockKey: String): String {
+    return when (dockKey) {
+        "thermal" -> "battery"
+        else -> dockKey
+    }
+}
+
+fun parseUniqueDockKeys(rawStr: String): List<String> {
+    val parsed = rawStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val uniqueList = mutableListOf<String>()
+    val seenModules = mutableSetOf<String>()
+    for (k in parsed) {
+        val mod = getDockTargetModuleKey(k)
+        if (mod !in seenModules) {
+            seenModules.add(mod)
+            uniqueList.add(k)
+        }
+    }
+    val fallbackOptions = listOf("battery", "cpu", "thermal", "ram", "sleep", "network", "storage", "steps", "data")
+    for (f in fallbackOptions) {
+        if (uniqueList.size >= 3) break
+        val mod = getDockTargetModuleKey(f)
+        if (mod !in seenModules) {
+            seenModules.add(mod)
+            uniqueList.add(f)
+        }
+    }
+    return uniqueList.take(3)
 }
 
 @Composable
@@ -359,14 +398,14 @@ fun SystemPulseHero(
     activeCount: Int,
     dashData: Map<String, Map<String, String>>,
     context: android.content.Context,
+    viewModel: DashboardViewModel,
     onModuleClick: (String) -> Unit
 ) {
     var dockKeysStr by remember {
         mutableStateOf(Prefs.getString(context, "top_dock_widgets", "battery,cpu,thermal") ?: "battery,cpu,thermal")
     }
     val dockKeys = remember(dockKeysStr) {
-        val parsed = dockKeysStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        if (parsed.size >= 3) parsed.take(3) else (parsed + listOf("battery", "cpu", "thermal")).distinct().take(3)
+        parseUniqueDockKeys(dockKeysStr)
     }
     var showCustomizeDialog by remember { mutableStateOf(false) }
 
@@ -505,6 +544,21 @@ fun SystemPulseHero(
                 val joined = updatedKeys.take(3).joinToString(",")
                 Prefs.setString(context, "top_dock_widgets", joined)
                 dockKeysStr = joined
+
+                // 1. Enable each target module for the selected dock circles
+                val targetModules = updatedKeys.take(3).map { getDockTargetModuleKey(it) }.distinct()
+                targetModules.forEach { moduleKey ->
+                    Prefs.setModuleEnabled(context, moduleKey, true)
+                }
+
+                // 2. Re-order module cards so selected dock items replace/move to top of the widgets list below
+                val existingOrderStr = Prefs.getString(context, "dash_module_order", null) ?: ""
+                val existingOrder = existingOrderStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val newOrder = (targetModules + (existingOrder - targetModules.toSet())).distinct()
+                Prefs.setString(context, "dash_module_order", newOrder.joinToString(","))
+
+                // 3. Immediately refresh view model
+                viewModel.refresh()
             }
         )
     }
@@ -955,13 +1009,9 @@ fun TopDockCustomizerDialog(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
-    val activeKeys = remember {
+    val activeKeys = remember(currentKeys) {
         mutableStateListOf<String>().apply {
-            addAll(currentKeys.take(3))
-            while (size < 3) {
-                val candidate = ALL_DOCK_WIDGET_OPTIONS.firstOrNull { it.first !in this }?.first ?: "battery"
-                add(candidate)
-            }
+            addAll(parseUniqueDockKeys(currentKeys.joinToString(",")))
         }
     }
     var expandedDropdownIndex by remember { mutableIntStateOf(-1) }
@@ -1026,6 +1076,15 @@ fun TopDockCustomizerDialog(
                                                 DropdownMenuItem(
                                                     text = { Text(optLabel) },
                                                     onClick = {
+                                                        val targetMod = getDockTargetModuleKey(optKey)
+                                                        val oldKey = activeKeys[idx]
+                                                        val existingIdx = activeKeys.indices.firstOrNull { i ->
+                                                            i != idx && getDockTargetModuleKey(activeKeys[i]) == targetMod
+                                                        } ?: -1
+
+                                                        if (existingIdx >= 0) {
+                                                            activeKeys[existingIdx] = oldKey
+                                                        }
                                                         activeKeys[idx] = optKey
                                                         expandedDropdownIndex = -1
                                                     }
