@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -169,8 +170,9 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
         visibleModules.filter { it.key() !in dockModuleKeys }
     }
 
-    val layoutStyle by Prefs.getStringFlow(context, "dash_layout_style", "LIST")
+    val savedLayoutStyle by Prefs.getStringFlow(context, "dash_layout_style", "LIST")
         .collectAsState(initial = Prefs.getString(context, "dash_layout_style", "LIST") ?: "LIST")
+    val layoutStyle = savedLayoutStyle ?: "LIST"
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -201,40 +203,11 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
 
             if (isRunning && displayModules.isNotEmpty()) {
                 item(key = "layout_switcher_bar") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Layout: $layoutStyle",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        IconButton(
-                            onClick = {
-                                val next = when (layoutStyle) {
-                                    "LIST" -> "GRID"
-                                    "GRID" -> "PUZZLE"
-                                    else -> "LIST"
-                                }
-                                Prefs.setString(context, "dash_layout_style", next)
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = when (layoutStyle) {
-                                    "GRID" -> Icons.Default.GridView
-                                    "PUZZLE" -> Icons.Default.Dashboard
-                                    else -> Icons.Default.Menu
-                                },
-                                contentDescription = "Switch Layout",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                    DashboardLayoutBar(
+                        layoutStyle = layoutStyle,
+                        moduleCount = displayModules.size,
+                        onLayoutSelected = { Prefs.setString(context, "dash_layout_style", it) }
+                    )
                 }
             }
 
@@ -248,6 +221,10 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                             textAlign = TextAlign.Center
                         )
                     }
+                }
+            } else if (displayModules.isEmpty()) {
+                item(key = "empty_modules") {
+                    DashboardEmptyState()
                 }
             } else if (layoutStyle == "GRID") {
                 // --- 1. GRID MODE (2-Column Grid) ---
@@ -355,6 +332,142 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardLayoutBar(
+    layoutStyle: String,
+    moduleCount: Int,
+    onLayoutSelected: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Dashboard",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "$moduleCount active cards",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LayoutChip(
+                    selected = layoutStyle == "LIST",
+                    icon = Icons.Default.Menu,
+                    label = "List",
+                    onClick = { onLayoutSelected("LIST") }
+                )
+                LayoutChip(
+                    selected = layoutStyle == "GRID",
+                    icon = Icons.Default.GridView,
+                    label = "Grid",
+                    onClick = { onLayoutSelected("GRID") }
+                )
+                LayoutChip(
+                    selected = layoutStyle == "PUZZLE",
+                    icon = Icons.Default.Dashboard,
+                    label = "Puzzle",
+                    onClick = { onLayoutSelected("PUZZLE") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayoutChip(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(15.dp),
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardEmptyState() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.DashboardCustomize,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Column {
+                Text(
+                    text = "No cards below the dock",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Enable more extensions or change the top dock widgets.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -789,7 +902,7 @@ fun GridKernelCard(
 ) {
     val icon = ModuleRegistry.iconFor(key)
     val name = ModuleRegistry.nameFor(key)
-    val primaryValue = data.values.firstOrNull() ?: ""
+    val primaryValue = data.values.firstOrNull() ?: "--"
     val color = getModuleColor(key)
 
     Surface(
@@ -798,7 +911,8 @@ fun GridKernelCard(
             .height(115.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.16f))
     ) {
         Column(
             modifier = Modifier
@@ -862,7 +976,7 @@ fun PuzzleTileCard(
 ) {
     val icon = ModuleRegistry.iconFor(key)
     val name = ModuleRegistry.nameFor(key)
-    val primaryValue = data.values.firstOrNull() ?: ""
+    val primaryValue = data.values.firstOrNull() ?: "--"
     val color = getModuleColor(key)
 
     Surface(
@@ -1126,14 +1240,16 @@ fun KernelCard(
     val module = MonitorService.getLiveModule(key) ?: ModuleRegistry.getModule(key)
     val icon = ModuleRegistry.iconFor(key)
     val name = ModuleRegistry.nameFor(key)
-    val primaryValue = data.values.firstOrNull() ?: ""
+    val primaryValue = data.values.firstOrNull() ?: "--"
+    val color = getModuleColor(key)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.14f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -1155,10 +1271,10 @@ fun KernelCard(
                 Surface(
                     modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    color = color.copy(alpha = 0.14f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = color)
                     }
                 }
                 
@@ -1169,7 +1285,7 @@ fun KernelCard(
                     Text(
                         text = primaryValue,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = color,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
