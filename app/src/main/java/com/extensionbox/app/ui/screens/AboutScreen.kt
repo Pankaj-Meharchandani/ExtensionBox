@@ -1,69 +1,130 @@
 package com.extensionbox.app.ui.screens
 
-import android.content.Intent
-import android.net.Uri
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.extensionbox.app.BuildConfig
 import com.extensionbox.app.R
 import com.extensionbox.app.network.UpdateChecker
-import com.extensionbox.app.network.Release
-import com.extensionbox.app.ui.components.AppCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Refresh
-import com.extensionbox.app.SystemAccess
-import androidx.compose.ui.platform.LocalContext
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+
+private data class ContributorInfo(
+    val nameStringRes: Int,
+    val username: String,
+    val githubUrl: String,
+    val accentColor: Color
+)
+
+private val CONTRIBUTORS = listOf(
+    ContributorInfo(
+        nameStringRes = R.string.pankaj_meharchandani,
+        username = "Pankaj-Meharchandani",
+        githubUrl = "https://github.com/Pankaj-Meharchandani",
+        accentColor = Color(0xFFAB47BC) // Violet
+    ),
+    ContributorInfo(
+        nameStringRes = R.string.suvojeet_sengupta,
+        username = "suvojeet-sengupta",
+        githubUrl = "https://github.com/suvojeet-sengupta",
+        accentColor = Color(0xFF26A69A) // Cyan/Teal
+    ),
+    ContributorInfo(
+        nameStringRes = R.string.omer,
+        username = "omersusin",
+        githubUrl = "https://github.com/omersusin",
+        accentColor = Color(0xFFFF9100) // Amber/Orange
+    ),
+    ContributorInfo(
+        nameStringRes = R.string.juanma,
+        username = "juanma0511",
+        githubUrl = "https://github.com/juanma0511",
+        accentColor = Color(0xFF2979FF) // Royal Blue
+    )
+)
+
+object GitHubAvatarCache {
+    suspend fun getAvatarBitmap(context: Context, username: String): Bitmap? = withContext(Dispatchers.IO) {
+        val cacheFile = File(context.cacheDir, "github_avatar_$username.jpg")
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            try {
+                val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
+                if (bitmap != null) return@withContext bitmap
+            } catch (_: Exception) {
+                cacheFile.delete()
+            }
+        }
+
+        try {
+            val url = URL("https://github.com/$username.png")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            connection.instanceFollowRedirects = true
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299 || responseCode == 301 || responseCode == 302) {
+                val inputStream = connection.inputStream
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream.close()
+                if (bitmap != null) {
+                    try {
+                        FileOutputStream(cacheFile).use { out ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                        }
+                    } catch (_: Exception) {}
+                    return@withContext bitmap
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return@withContext null
+    }
+}
 
 @Composable
 fun AboutScreen() {
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
-    
-    // System Access State
-    var sysAccess by remember { mutableStateOf<SystemAccess?>(null) }
-    var accessTier by remember { mutableStateOf(context.getString(R.string.checking_system_access)) }
-    var rootProvider by remember { mutableStateOf(SystemAccess.RootProvider.NONE) }
 
     val checkForUpdates = stringResource(R.string.check_for_updates)
     var updateStatus by remember { mutableStateOf(checkForUpdates) }
     var isChecking by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        val access = withContext(Dispatchers.IO) { SystemAccess(context) }
-        sysAccess = access
-        accessTier = access.tier
-        rootProvider = access.rootProvider
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            sysAccess?.onDestroy()
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -71,138 +132,146 @@ fun AboutScreen() {
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // --- Hero Section ---
+        // --- Hero Header ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 16.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
         ) {
             Surface(
-                modifier = Modifier.size(100.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer
+                modifier = Modifier.size(86.dp),
+                shape = RoundedCornerShape(26.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_launcher_foreground),
                         contentDescription = stringResource(id = R.string.logo),
-                        modifier = Modifier.size(80.dp)
+                        modifier = Modifier.size(70.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = stringResource(id = R.string.extension_box),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = stringResource(id = R.string.version_name, BuildConfig.VERSION_NAME),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
-            )
-        }
 
-        // --- Description Card ---
-        AppCard {
-            Text(
-                text = stringResource(id = R.string.about_description),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyLarge,
-                lineHeight = 22.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+            Spacer(Modifier.height(4.dp))
 
-        // --- System Access Status (Interactive) ---
-        AppCard {
-            val currentAccess = sysAccess
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (currentAccess?.isEnhanced() == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = if (currentAccess?.isEnhanced() == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(id = R.string.system_access),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = accessTier,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (rootProvider != SystemAccess.RootProvider.NONE) {
-                        Text(
-                            text = stringResource(id = R.string.via_root_provider, rootProvider.label),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                IconButton(onClick = {
-                    sysAccess?.onDestroy()
-                    sysAccess = null
-                    accessTier = context.getString(R.string.checking_system_access)
-                    rootProvider = SystemAccess.RootProvider.NONE
-                    coroutineScope.launch {
-                        val access = withContext(Dispatchers.IO) { SystemAccess(context) }
-                        sysAccess = access
-                        accessTier = access.tier
-                        rootProvider = access.rootProvider
-                    }
-                }) {
-                    Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.refresh_access))
-                }
+                Text(
+                    text = stringResource(id = R.string.version_name, BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)
+                )
             }
         }
 
-        // --- Update Section ---
-        AppCard {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Update,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
+        // --- Description Bento Card ---
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+            border = BorderStroke(1.dp, Color(0xFFFF4081).copy(alpha = 0.25f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(32.dp),
+                        shape = CircleShape,
+                        color = Color(0xFFFF4081).copy(alpha = 0.15f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = Color(0xFFFF4081),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     Text(
-                        text = stringResource(id = R.string.software_update),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = updateStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "About ExtensionBox",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                
+
+                Spacer(Modifier.height(10.dp))
+
+                Text(
+                    text = stringResource(id = R.string.about_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // --- Software Update Bento Card ---
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+            border = BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.25f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF00E676).copy(alpha = 0.15f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Update,
+                                contentDescription = null,
+                                tint = Color(0xFF00E676),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    Column {
+                        Text(
+                            text = stringResource(id = R.string.software_update),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = updateStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 if (isChecking) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 } else {
@@ -210,6 +279,7 @@ fun AboutScreen() {
                     val latestVersionMessage = stringResource(id = R.string.latest_version_message)
                     val newVersionAvailable = stringResource(id = R.string.new_version_available)
                     val updateCheckFailed = stringResource(id = R.string.update_check_failed)
+
                     IconButton(
                         onClick = {
                             isChecking = true
@@ -233,105 +303,173 @@ fun AboutScreen() {
                                 }
                             }
                         },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        modifier = Modifier.background(Color(0xFF00E676).copy(alpha = 0.15f), CircleShape)
                     ) {
-                        Icon(Icons.Default.Update, null)
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(id = R.string.check_for_updates),
+                            tint = Color(0xFF00E676),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
         }
 
-        // --- Team Section ---
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                Icon(Icons.Default.Code, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
+        // --- Contributors Section Header ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(id = R.string.engineering_team),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-            }
-            
-            AppCard {
-                DeveloperItem(
-                    name = stringResource(id = R.string.suvojeet_sengupta),
-                    role = stringResource(id = R.string.developer),
-                    github = "https://github.com/suvojeet-sengupta",
-                    onCli = { uriHandler.openUri(it) }
-                )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                DeveloperItem(
-                    name = stringResource(id = R.string.pankaj_meharchandani),
-                    role = stringResource(id = R.string.developer),
-                    github = "https://github.com/Pankaj-Meharchandani",
-                    onCli = { uriHandler.openUri(it) }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                
-                DeveloperItem(
-                    name = stringResource(id = R.string.omer),
-                    role = stringResource(id = R.string.contributor),
-                    github = "https://github.com/omersusin",
-                    onCli = { uriHandler.openUri(it) }
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                
-                DeveloperItem(
-                    name = stringResource(id = R.string.juanma),
-                    role = stringResource(id = R.string.developer),
-                    github = "https://github.com/juanma0511",
-                    onCli = { uriHandler.openUri(it) }
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                ) {
+                    Text(
+                        text = "${CONTRIBUTORS.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(100.dp))
+        // --- 2-Column Grid of Contributor Cards ---
+        val chunkedContributors = CONTRIBUTORS.chunked(2)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            chunkedContributors.forEach { rowList ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowList.forEach { contributor ->
+                        ContributorGridCard(
+                            contributor = contributor,
+                            onClick = { uriHandler.openUri(contributor.githubUrl) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (rowList.size == 1) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
 @Composable
-fun DeveloperItem(name: String, role: String, github: String, onCli: (String) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCli(github) }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = name.take(1),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+private fun ContributorGridCard(
+    contributor: ContributorInfo,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val name = stringResource(id = contributor.nameStringRes)
+    var avatarBitmap by remember(contributor.username) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(contributor.username) {
+        val bm = GitHubAvatarCache.getAvatarBitmap(context, contributor.username)
+        if (bm != null) {
+            avatarBitmap = bm.asImageBitmap()
         }
-        Spacer(Modifier.width(16.dp))
-        Column {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = role,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(115.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        border = BorderStroke(1.dp, contributor.accentColor.copy(alpha = 0.28f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val bitmap = avatarBitmap
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = name,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(42.dp),
+                        shape = CircleShape,
+                        color = contributor.accentColor.copy(alpha = 0.2f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = name.take(1),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = contributor.accentColor
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = contributor.accentColor.copy(alpha = 0.12f),
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = contributor.accentColor,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+
+            Column {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "@${contributor.username}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contributor.accentColor,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
