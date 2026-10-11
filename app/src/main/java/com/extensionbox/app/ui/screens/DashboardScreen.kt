@@ -68,13 +68,14 @@ data class DockWidgetInfo(
 
 private val ALL_DOCK_WIDGET_OPTIONS = listOf(
     "battery" to "Battery Level",
+    "screen_time" to "Screen Time Today",
     "cpu" to "CPU Load",
     "ram" to "RAM Usage",
     "thermal" to "Battery Temp",
     "storage" to "Storage Usage",
     "data" to "Data Usage Today",
     "steps" to "Step Counter",
-    "sleep" to "Deep Sleep %",
+    "sleep" to "Device Sleep %",
     "unlock" to "Unlock Counter",
     "network" to "Download Speed",
     "uptime" to "Device Uptime"
@@ -85,6 +86,7 @@ fun getModuleColor(key: String): Color {
     val isLight = !isSystemInDarkTheme() && MaterialTheme.colorScheme.surface.luminance() > 0.5f
     return when (key) {
         "battery" -> if (isLight) Color(0xFF008A4B) else Color(0xFF00E676)
+        "screen_time" -> if (isLight) Color(0xFF00897B) else Color(0xFF26A69A)
         "cpu" -> if (isLight) Color(0xFF0088CC) else Color(0xFF00B0FF)
         "ram" -> if (isLight) Color(0xFF8E24AA) else Color(0xFFAB47BC)
         "thermal" -> if (isLight) Color(0xFFE65100) else Color(0xFFFF6D00)
@@ -904,10 +906,16 @@ private fun extractDockWidgetData(
             val count = text.replace(",", "").toFloatOrNull() ?: 0f
             DockWidgetInfo("steps", "Steps", text, text, "", (count / 10000f).coerceIn(0f, 1f), "steps")
         }
+        "screen_time" -> {
+            val text = dashData["screen_time"]?.get("screen_time.total_screen_time") ?: "--"
+            val num = text.substringBefore(" ")
+            val unit = text.substringAfter(" ", "")
+            DockWidgetInfo("screen_time", "Screen Time", text, num, unit, 0.5f, "screen_time")
+        }
         "sleep" -> {
             val text = dashData["sleep"]?.get("sleep.deep_percentage") ?: "--"
             val pct = text.removeSuffix("%").toFloatOrNull() ?: 0f
-            DockWidgetInfo("sleep", "Sleep", "${pct.toInt()}%", "${pct.toInt()}", "%", (pct / 100f).coerceIn(0f, 1f), "sleep")
+            DockWidgetInfo("sleep", "Device Sleep", "${pct.toInt()}%", "${pct.toInt()}", "%", (pct / 100f).coerceIn(0f, 1f), "sleep")
         }
         "unlock" -> {
             val text = dashData["unlock"]?.get("unlock.today") ?: "--"

@@ -20,7 +20,7 @@ class SleepModule : Module {
     private var uptimeStart: Long = 0
 
     override fun key(): String = "sleep"
-    override fun name(): String = ctx?.getString(R.string.sleep_module_name) ?: "Deep Sleep"
+    override fun name(): String = ctx?.getString(R.string.sleep_module_name) ?: "Device Sleep"
     override fun description(): String = ctx?.getString(R.string.sleep_module_description) ?: "CPU sleep vs awake ratio"
     override fun defaultEnabled(): Boolean = true
     override fun alive(): Boolean = running

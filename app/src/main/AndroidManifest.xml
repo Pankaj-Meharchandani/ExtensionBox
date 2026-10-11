@@ -127,7 +127,7 @@
 
         <receiver android:name=".widgets.ModuleWidgetProvider$SleepWidgetProvider"
             android:exported="true"
-            android:label="Deep Sleep">
+            android:label="Device Sleep">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

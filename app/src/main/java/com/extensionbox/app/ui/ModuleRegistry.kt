@@ -17,10 +17,11 @@ object ModuleRegistry {
 
     private val ALL_MODULES = listOf(
         ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "Battery & Screen", "Battery health, power and screen usage", true),
+        ModuleDef("screen_time", Icons.Rounded.Schedule, "Screen Time", "App usage, open counts & unlock analytics", true),
         ModuleDef("app_usage", Icons.Rounded.Apps, "App Usage", "Time spent in each application", true),
         ModuleDef("cpu", Icons.Rounded.Memory, "CPU", "CPU usage, frequency and temperature", true),
         ModuleDef("ram", Icons.Rounded.Memory, "RAM", "Memory status and running processes", true),
-        ModuleDef("sleep", Icons.Rounded.Bedtime, "Deep Sleep", "CPU sleep vs awake ratio", true),
+        ModuleDef("sleep", Icons.Rounded.Bedtime, "Device Sleep", "CPU sleep vs awake ratio", true),
         ModuleDef("network", Icons.Rounded.NetworkCheck, "Network Speed", "Real-time download/upload speed", true),
         ModuleDef("data", Icons.Rounded.DataUsage, "Data Usage", "Daily & monthly, WiFi & mobile", true),
         ModuleDef("unlock", Icons.Rounded.LockOpen, "Unlock Counter", "Daily unlocks, detox tracking", true),
@@ -43,11 +44,11 @@ object ModuleRegistry {
     fun count(): Int = MODULES.size
 
     fun iconFor(key: String): ImageVector {
-        return MODULES.find { it.key == key }?.icon ?: Icons.Rounded.Extension
+        return ALL_MODULES.find { it.key == key }?.icon ?: Icons.Rounded.Extension
     }
 
     fun nameFor(key: String): String {
-        return MODULES.find { it.key == key }?.name ?: key
+        return ALL_MODULES.find { it.key == key }?.name ?: key
     }
 
     fun getModules(): List<com.extensionbox.app.modules.Module> = MODULES.mapNotNull { getModule(it.key) }
@@ -55,6 +56,7 @@ object ModuleRegistry {
     fun getModule(key: String): com.extensionbox.app.modules.Module? {
         return when (key) {
             "battery" -> com.extensionbox.app.modules.BatteryModule()
+            "screen_time" -> com.extensionbox.app.modules.ScreenTimeModule()
             "cpu" -> com.extensionbox.app.modules.CpuModule()
             "ram" -> com.extensionbox.app.modules.RamModule()
             "app_usage" -> com.extensionbox.app.modules.AppUsageModule()

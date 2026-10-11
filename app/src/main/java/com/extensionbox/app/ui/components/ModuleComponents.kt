@@ -82,7 +82,7 @@ fun SettingSwitch(
 // Keys extractPoints can chart. Keep in sync with the `when` below.
 private val CHART_KEYS = setOf(
     "battery", "cpu", "ram", "sleep", "network", "data", "unlock", "storage",
-    "connection", "screen", "uptime", "steps", "speedtest"
+    "connection", "screen", "screen_time", "uptime", "steps", "speedtest"
 )
 
 fun hasChart(key: String): Boolean = key in CHART_KEYS
@@ -90,20 +90,21 @@ fun hasChart(key: String): Boolean = key in CHART_KEYS
 fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
     return history.mapNotNull { entity ->
         when (key) {
-            "battery"    -> entity.data["battery.level"]?.removeSuffix("%")?.toFloatOrNull()
-            "cpu"        -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
-            "ram"        -> entity.data["ram.percentage"]?.removeSuffix("%")?.toFloatOrNull()
-            "sleep"      -> entity.data["sleep.deep_percentage"]?.removeSuffix("%")?.toFloatOrNull()
-            "network"    -> entity.data["net.download"]?.let { parseSpeedToKbps(it) }
-            "data"       -> entity.data["data.today_total"]?.let { parseBytesToKb(it) }
-            "unlock"     -> entity.data["unlock.today"]?.toFloatOrNull()
-            "storage"    -> entity.data["storage.percentage"]?.removeSuffix("%")?.toFloatOrNull()
-            "connection" -> entity.data["conn.rssi"]?.substringBefore(" ")?.toFloatOrNull()?.let { -it }
-            "screen"     -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
-            "uptime"     -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }
-            "steps"      -> entity.data["steps.today"]?.replace(",", "")?.toFloatOrNull()
-            "speedtest"  -> entity.data["speedtest.download"]?.let { parseSpeedToKbps(it) }
-            else         -> null
+            "battery"     -> entity.data["battery.level"]?.removeSuffix("%")?.toFloatOrNull()
+            "cpu"         -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
+            "ram"         -> entity.data["ram.percentage"]?.removeSuffix("%")?.toFloatOrNull()
+            "sleep"       -> entity.data["sleep.deep_percentage"]?.removeSuffix("%")?.toFloatOrNull()
+            "network"     -> entity.data["net.download"]?.let { parseSpeedToKbps(it) }
+            "data"        -> entity.data["data.today_total"]?.let { parseBytesToKb(it) }
+            "unlock"      -> entity.data["unlock.today"]?.toFloatOrNull()
+            "storage"     -> entity.data["storage.percentage"]?.removeSuffix("%")?.toFloatOrNull()
+            "connection"  -> entity.data["conn.rssi"]?.substringBefore(" ")?.toFloatOrNull()?.let { -it }
+            "screen"      -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
+            "screen_time" -> entity.data["screen_time.total_screen_time_ms"]?.toFloatOrNull()?.div(60000f)
+            "uptime"      -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }
+            "steps"       -> entity.data["steps.today"]?.replace(",", "")?.toFloatOrNull()
+            "speedtest"   -> entity.data["speedtest.download"]?.let { parseSpeedToKbps(it) }
+            else          -> null
         }
     }
 }
