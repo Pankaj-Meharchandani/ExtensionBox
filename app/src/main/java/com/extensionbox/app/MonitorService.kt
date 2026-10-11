@@ -35,6 +35,12 @@ class MonitorService : Service() {
 
         fun getInstance(): MonitorService? = instance
         fun getModuleData(key: String): LinkedHashMap<String, String>? = moduleData[key]
+        fun getActiveModuleKeys(): Set<String> = instance?.modules
+            ?.filter { it.alive() }
+            ?.map { it.key() }
+            ?.toSet()
+            ?: emptySet()
+        fun getLiveModule(key: String): Module? = instance?.modules?.firstOrNull { it.key() == key && it.alive() }
     }
 
     private lateinit var sysAccess: SystemAccess
@@ -341,12 +347,14 @@ class MonitorService : Service() {
         Prefs.setLong(this, "dat_daily_mobile", 0L)
         Prefs.setLong(this, "scr_on_acc", 0L)
         Prefs.setInt(this, "hab_today", 0)
+        Prefs.setBool(this, "ulk_limit_fired", false)
+        Prefs.setBool(this, "dat_plan_alert_fired", false)
     }
 
     private fun doMonthRollover() {
-        Prefs.setLong(this, "dat_monthly_total", 0L)
-        Prefs.setLong(this, "dat_monthly_wifi", 0L)
-        Prefs.setLong(this, "dat_monthly_mobile", 0L)
+        Prefs.setLong(this, "dat_month_total", 0L)
+        Prefs.setLong(this, "dat_month_wifi", 0L)
+        Prefs.setLong(this, "dat_month_mobile", 0L)
     }
 
     private fun calculateNextDelay(): Long {

@@ -82,7 +82,7 @@ class StepModule : Module, SensorEventListener {
         val sb = StringBuilder()
         val c = ctx ?: return ""
         val goal = if (c != null) Prefs.getInt(c, "stp_goal", 10000) else 10000
-        val pct = dailySteps * 100f / goal
+        val pct = if (goal > 0) dailySteps * 100f / goal else 0f
         
         sb.append(c.getString(R.string.step_module_steps, Fmt.number(dailySteps), Fmt.number(goal.toLong()), pct))
         

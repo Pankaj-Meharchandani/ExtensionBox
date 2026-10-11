@@ -31,6 +31,12 @@ data class PackageDebugInfo(
     val hasLauncher: Boolean
 )
 
+enum class UninstallResult {
+    REMOVED,
+    STARTED,
+    FAILED
+}
+
 class DebloatViewModel : ViewModel() {
 
     private val _apps = MutableStateFlow<List<AppInfo>>(emptyList())
@@ -81,7 +87,11 @@ class DebloatViewModel : ViewModel() {
     private fun checkCapabilities() {
         viewModelScope.launch {
             _isRooted.value = isDeviceRooted()
-            _hasShizuku.value = Shizuku.pingBinder() && Shizuku.checkSelfPermission() == 0
+            _hasShizuku.value = try {
+                Shizuku.pingBinder() && Shizuku.checkSelfPermission() == 0
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 
@@ -170,15 +180,13 @@ class DebloatViewModel : ViewModel() {
         }
     }
 
-    suspend fun uninstallApp(context: Context, app: AppInfo, recoverable: Boolean = false) {
+    suspend fun uninstallApp(context: Context, app: AppInfo, recoverable: Boolean = false): UninstallResult {
         android.util.Log.d("DebloatVM", "uninstallApp called for ${app.packageName}, system=${app.isSystem}, recoverable=$recoverable")
         // If we have elevated rights, prefer using pm uninstall directly for all packages
         if (_hasShizuku.value) {
-            uninstallWithShizuku(app.packageName, recoverable)
-            return
+            return if (uninstallWithShizuku(app.packageName, recoverable)) UninstallResult.REMOVED else UninstallResult.FAILED
         } else if (_isRooted.value) {
-            uninstallWithRoot(app.packageName, recoverable)
-            return
+            return if (uninstallWithRoot(app.packageName, recoverable)) UninstallResult.REMOVED else UninstallResult.FAILED
         }
 
         // No elevation available: handle user apps via intent, system apps cannot be removed
@@ -197,17 +205,20 @@ class DebloatViewModel : ViewModel() {
                 withContext(Dispatchers.Main) {
                     context.startActivity(uninstallPkgIntent)
                 }
+                return UninstallResult.STARTED
             } catch (e: Exception) {
                 android.util.Log.w("DebloatVM", "uninstall intent failed, falling back: ${e.message}")
                 try {
                     withContext(Dispatchers.Main) {
                         context.startActivity(deleteIntent)
                     }
+                    return UninstallResult.STARTED
                 } catch (ex: Exception) {
                     android.util.Log.e("DebloatVM", "fallback uninstall intent failed: ${ex.message}", ex)
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "Unable to start uninstall for ${app.packageName}: ${ex.message}", Toast.LENGTH_LONG).show()
                     }
+                    return UninstallResult.FAILED
                 }
             }
         } else {
@@ -215,28 +226,31 @@ class DebloatViewModel : ViewModel() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Cannot uninstall system app without root or Shizuku", Toast.LENGTH_LONG).show()
             }
+            return UninstallResult.FAILED
         }
     }
 
-    private fun uninstallWithShizuku(packageName: String, recoverable: Boolean) {
+    private fun uninstallWithShizuku(packageName: String, recoverable: Boolean): Boolean {
         // Use Shizuku to run pm uninstall. If recoverable is requested, include -k --user 0
         val cmd = if (recoverable) arrayOf("pm", "uninstall", "-k", "--user", "0", packageName)
         else arrayOf("pm", "uninstall", packageName)
-        try {
-            Shizuku.newProcess(cmd, null, null).waitFor()
+        return try {
+            Shizuku.newProcess(cmd, null, null).waitFor() == 0
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
     }
 
-    private fun uninstallWithRoot(packageName: String, recoverable: Boolean) {
+    private fun uninstallWithRoot(packageName: String, recoverable: Boolean): Boolean {
         // Use root to run pm uninstall. If recoverable is requested, include -k --user 0
-        try {
+        return try {
             val cmd = if (recoverable) "pm uninstall -k --user 0 $packageName" else "pm uninstall $packageName"
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-            process.waitFor()
+            process.waitFor() == 0
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
     }
 

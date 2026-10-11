@@ -25,7 +25,7 @@ class PrivacyModule : Module {
     override fun key(): String = "privacy"
     override fun name(): String = ctx?.getString(R.string.privacy_module_name) ?: "Privacy Dashboard"
     override fun description(): String = ctx?.getString(R.string.privacy_module_description) ?: "Permission usage and force-revoke tools"
-    override fun defaultEnabled(): Boolean = true
+    override fun defaultEnabled(): Boolean = false
     override fun alive(): Boolean = running
     override fun priority(): Int = 90
     override fun hasSettings(): Boolean = true

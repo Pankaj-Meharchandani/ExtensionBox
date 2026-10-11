@@ -170,7 +170,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
     }
 
     var layoutStyle by remember {
-        mutableStateOf(Prefs.getString(context, "notif_layout_style", "LIST") ?: "LIST")
+        mutableStateOf(Prefs.getString(context, "dash_layout_style", "LIST") ?: "LIST")
     }
 
     val lazyListState = rememberLazyListState()
@@ -221,7 +221,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                                     else -> "LIST"
                                 }
                                 layoutStyle = next
-                                Prefs.setString(context, "notif_layout_style", next)
+                                Prefs.setString(context, "dash_layout_style", next)
                             },
                             modifier = Modifier.size(32.dp)
                         ) {
@@ -1125,7 +1125,7 @@ fun KernelCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val module = ModuleRegistry.getModule(key)
+    val module = MonitorService.getLiveModule(key) ?: ModuleRegistry.getModule(key)
     val icon = ModuleRegistry.iconFor(key)
     val name = ModuleRegistry.nameFor(key)
     val primaryValue = data.values.firstOrNull() ?: ""

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.extensionbox.app.MonitorService
 import com.extensionbox.app.Prefs
 import com.extensionbox.app.SystemAccess
 import com.extensionbox.app.db.AppDatabase
@@ -44,7 +45,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val expandedStates = mutableStateMapOf<String, Boolean>()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _sysAccess.value = SystemAccess(context)
         }
         observeData()
@@ -97,13 +98,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     Prefs.isModuleEnabled(context, it.key(), it.defaultEnabled())
                 }
                 
-                var count = 0
+                val activeKeys = MonitorService.getActiveModuleKeys()
                 val dataMap = mutableMapOf<String, Map<String, String>>()
                 val histMap = mutableMapOf<String, List<ModuleDataEntity>>()
                 val fifteenMinsAgo = System.currentTimeMillis() - (15 * 60 * 1000)
 
                 for (module in enabledModules) {
-                    if (module.alive()) count++
                     val latest = database.moduleDataDao().getLatest(module.key())
                     if (latest != null) {
                         dataMap[module.key()] = latest.data
@@ -117,7 +117,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     histMap[module.key()] = history
                 }
 
-                _activeCount.value = count
+                _activeCount.value = activeKeys.size
                 _dashData.value = dataMap
                 _historyData.value = histMap
                 updateVisibleModules()
@@ -138,13 +138,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val enabledModules = ModuleRegistry.getModules().filter {
             Prefs.isModuleEnabled(context, it.key(), it.defaultEnabled())
         }
-        var count = 0
+        val activeKeys = MonitorService.getActiveModuleKeys()
         val dataMap = mutableMapOf<String, Map<String, String>>()
         val histMap = mutableMapOf<String, List<ModuleDataEntity>>()
         val fifteenMinsAgo = System.currentTimeMillis() - (15 * 60 * 1000)
 
         for (module in enabledModules) {
-            if (module.alive()) count++
             val latest = database.moduleDataDao().getLatest(module.key())
             if (latest != null) {
                 dataMap[module.key()] = latest.data
@@ -158,7 +157,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             histMap[module.key()] = history
         }
 
-        _activeCount.value = count
+        _activeCount.value = activeKeys.size
         _dashData.value = dataMap
         _historyData.value = histMap
     }

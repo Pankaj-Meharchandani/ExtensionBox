@@ -29,7 +29,9 @@ import com.extensionbox.app.R
 import com.extensionbox.app.network.UpdateChecker
 import com.extensionbox.app.network.Release
 import com.extensionbox.app.ui.components.AppCard
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Refresh
 import com.extensionbox.app.SystemAccess
@@ -42,13 +44,20 @@ fun AboutScreen() {
     val uriHandler = LocalUriHandler.current
     
     // System Access State
-    var sysAccess by remember { mutableStateOf(SystemAccess(context)) }
-    var accessTier by remember { mutableStateOf(sysAccess.tier) }
-    var rootProvider by remember { mutableStateOf(sysAccess.rootProvider) }
+    var sysAccess by remember { mutableStateOf<SystemAccess?>(null) }
+    var accessTier by remember { mutableStateOf(context.getString(R.string.checking_system_access)) }
+    var rootProvider by remember { mutableStateOf(SystemAccess.RootProvider.NONE) }
 
     val checkForUpdates = stringResource(R.string.check_for_updates)
     var updateStatus by remember { mutableStateOf(checkForUpdates) }
     var isChecking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val access = withContext(Dispatchers.IO) { SystemAccess(context) }
+        sysAccess = access
+        accessTier = access.tier
+        rootProvider = access.rootProvider
+    }
 
     Column(
         modifier = Modifier
@@ -105,20 +114,21 @@ fun AboutScreen() {
 
         // --- System Access Status (Interactive) ---
         AppCard {
+            val currentAccess = sysAccess
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = if (sysAccess.isEnhanced()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                    color = if (currentAccess?.isEnhanced() == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
                     modifier = Modifier.size(48.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = if (sysAccess.isEnhanced()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            tint = if (currentAccess?.isEnhanced() == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -145,10 +155,15 @@ fun AboutScreen() {
                     }
                 }
                 IconButton(onClick = {
-                    // Re-instantiate to trigger checks again
-                    sysAccess = SystemAccess(context)
-                    accessTier = sysAccess.tier
-                    rootProvider = sysAccess.rootProvider
+                    sysAccess = null
+                    accessTier = context.getString(R.string.checking_system_access)
+                    rootProvider = SystemAccess.RootProvider.NONE
+                    coroutineScope.launch {
+                        val access = withContext(Dispatchers.IO) { SystemAccess(context) }
+                        sysAccess = access
+                        accessTier = access.tier
+                        rootProvider = access.rootProvider
+                    }
                 }) {
                     Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.refresh_access))
                 }
@@ -195,7 +210,7 @@ fun AboutScreen() {
                             coroutineScope.launch {
                                 try {
                                     val service = UpdateChecker.getGitHubService()
-                                    val releases = service.getReleases("suvojeet-sengupta", "ExtensionBox")
+                                    val releases = service.getReleases("Pankaj-Meharchandani", "ExtensionBox")
                                     if (releases.isNotEmpty()) {
                                         val latest = releases[0].tagName
                                         updateStatus = if (latest.contains(BuildConfig.VERSION_NAME)) {

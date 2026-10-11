@@ -33,7 +33,7 @@ object ModuleRegistry {
         ModuleDef("privacy", Icons.Rounded.Shield, "Privacy Dashboard", "Permission usage and force-revoke tools", false)
     )
 
-    private val HIDDEN_KEYS = setOf("speedtest", "app_usage", "privacy")
+    private val HIDDEN_KEYS = emptySet<String>()
     private val MODULES = ALL_MODULES.filter { it.key !in HIDDEN_KEYS }
 
     fun keyAt(i: Int): String = MODULES[i].key

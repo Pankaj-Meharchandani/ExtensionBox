@@ -65,7 +65,7 @@ fun ModuleDetailScreen(
     val sysAccess = viewModel.sysAccess.collectAsState().value
 
     val data = dashData[moduleKey] ?: emptyMap()
-    val module = com.extensionbox.app.ui.ModuleRegistry.getModule(moduleKey)
+    val module = MonitorService.getLiveModule(moduleKey) ?: com.extensionbox.app.ui.ModuleRegistry.getModule(moduleKey)
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 

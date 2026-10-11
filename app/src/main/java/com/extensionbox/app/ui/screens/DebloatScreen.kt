@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.extensionbox.app.ui.viewmodel.DebloatViewModel
+import com.extensionbox.app.ui.viewmodel.UninstallResult
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +42,7 @@ fun DebloatScreen(
     val hasShizuku by viewModel.hasShizuku.collectAsState()
     val showSystemApps by viewModel.showSystemApps.collectAsState()
     var query by remember { mutableStateOf("") }
+    var pendingUninstall by remember { mutableStateOf<AppInfo?>(null) }
 
     val filteredApps = remember(apps, showSystemApps, query) {
         val base = if (showSystemApps) {
@@ -119,14 +121,7 @@ fun DebloatScreen(
                         if (app.isSystem && !(hasShizuku || isRooted)) {
                             Toast.makeText(context, "Cannot uninstall system app without root/Shizuku", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Uninstalling ${app.label}", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                viewModel.uninstallApp(context, app)
-                                // remove from list right away so the UI reflects deletion
-                                viewModel.removeApp(app.packageName)
-                                // notify user
-                                context.showUninstallNotification(app.label)
-                            }
+                            pendingUninstall = app
                         }
                     },
 
@@ -134,6 +129,51 @@ fun DebloatScreen(
                 )
             }
         }
+
+    pendingUninstall?.let { app ->
+        AlertDialog(
+            onDismissRequest = { pendingUninstall = null },
+            title = { Text("Uninstall ${app.label}?") },
+            text = {
+                Text(
+                    if (app.isSystem) {
+                        "This is a system package (${app.packageName}). Removing it may break device features. Continue only if you know what it does."
+                    } else {
+                        "This will start uninstall for ${app.packageName}."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingUninstall = null
+                        Toast.makeText(context, "Uninstalling ${app.label}", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            when (viewModel.uninstallApp(context, app)) {
+                                UninstallResult.REMOVED -> {
+                                    viewModel.removeApp(app.packageName)
+                                    context.showUninstallNotification(app.label)
+                                }
+                                UninstallResult.STARTED -> {
+                                    Toast.makeText(context, "Uninstall prompt opened for ${app.label}", Toast.LENGTH_SHORT).show()
+                                }
+                                UninstallResult.FAILED -> {
+                                    Toast.makeText(context, "Could not uninstall ${app.label}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Uninstall", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUninstall = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     }
 
 
@@ -146,9 +186,7 @@ fun AppItem(
     val context = LocalContext.current
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onUninstall() },
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (app.category) {
                 AppCategory.SAFE -> Color.Green.copy(alpha = 0.1f)
