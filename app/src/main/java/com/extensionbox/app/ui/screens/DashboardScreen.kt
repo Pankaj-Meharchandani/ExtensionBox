@@ -1,7 +1,6 @@
 package com.extensionbox.app.ui.screens
 
 import android.content.Intent
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -27,11 +26,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -697,12 +693,12 @@ fun ThreeCircleDock(
                     )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        modifier = Modifier.padding(horizontal = 11.dp)
                     ) {
                         if (isShortUnit) {
                             AutoResizedText(
                                 text = leftWidget.fullDisplayValue,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (leftWidget.fullDisplayValue.length > 4) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = leftColor,
                                 textAlign = TextAlign.Center
@@ -710,7 +706,7 @@ fun ThreeCircleDock(
                         } else {
                             AutoResizedText(
                                 text = leftWidget.valueNumber,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (leftWidget.valueNumber.length > 4) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = leftColor,
                                 textAlign = TextAlign.Center
@@ -761,12 +757,12 @@ fun ThreeCircleDock(
                 )
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 6.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 ) {
                     if (isCenterShortUnit) {
                         AutoResizedText(
                             text = centerWidget.fullDisplayValue,
-                            style = MaterialTheme.typography.headlineLarge,
+                            style = if (centerWidget.fullDisplayValue.length > 5) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Black,
                             color = centerColor,
                             textAlign = TextAlign.Center
@@ -774,7 +770,7 @@ fun ThreeCircleDock(
                     } else {
                         AutoResizedText(
                             text = centerWidget.valueNumber,
-                            style = MaterialTheme.typography.headlineMedium,
+                            style = if (centerWidget.valueNumber.length > 5) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Black,
                             color = centerColor,
                             textAlign = TextAlign.Center
@@ -825,12 +821,12 @@ fun ThreeCircleDock(
                     )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        modifier = Modifier.padding(horizontal = 11.dp)
                     ) {
                         if (isShortUnit) {
                             AutoResizedText(
                                 text = rightWidget.fullDisplayValue,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (rightWidget.fullDisplayValue.length > 4) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = rightColor,
                                 textAlign = TextAlign.Center
@@ -838,7 +834,7 @@ fun ThreeCircleDock(
                         } else {
                             AutoResizedText(
                                 text = rightWidget.valueNumber,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (rightWidget.valueNumber.length > 4) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = rightColor,
                                 textAlign = TextAlign.Center
