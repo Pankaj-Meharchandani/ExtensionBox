@@ -59,6 +59,12 @@ fun AboutScreen() {
         rootProvider = access.rootProvider
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            sysAccess?.onDestroy()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -155,6 +161,7 @@ fun AboutScreen() {
                     }
                 }
                 IconButton(onClick = {
+                    sysAccess?.onDestroy()
                     sysAccess = null
                     accessTier = context.getString(R.string.checking_system_access)
                     rootProvider = SystemAccess.RootProvider.NONE

@@ -169,9 +169,8 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
         visibleModules.filter { it.key() !in dockModuleKeys }
     }
 
-    var layoutStyle by remember {
-        mutableStateOf(Prefs.getString(context, "dash_layout_style", "LIST") ?: "LIST")
-    }
+    val layoutStyle by Prefs.getStringFlow(context, "dash_layout_style", "LIST")
+        .collectAsState(initial = Prefs.getString(context, "dash_layout_style", "LIST") ?: "LIST")
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -220,7 +219,6 @@ fun DashboardScreen(viewModel: DashboardViewModel = viewModel(), onModuleClick: 
                                     "GRID" -> "PUZZLE"
                                     else -> "LIST"
                                 }
-                                layoutStyle = next
                                 Prefs.setString(context, "dash_layout_style", next)
                             },
                             modifier = Modifier.size(32.dp)

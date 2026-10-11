@@ -21,7 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -107,8 +106,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () 
         sysAccess = newAccess
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            sysAccess?.onDestroy()
+        }
+    }
+
     // Refresh function
     fun refreshAccess() {
+        sysAccess?.onDestroy()
         sysAccess = null // Show loading
         scope.launch {
             val newAccess = withContext(Dispatchers.IO) {
@@ -273,30 +279,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () 
                     }
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                var showLayoutDialog by remember { mutableStateOf(false) }
-                var layoutStyle by remember { mutableStateOf(Prefs.getString(context, "notif_layout_style", "PUZZLE") ?: "PUZZLE") }
-                
-                SettingsItem(
-                    title = stringResource(id = R.string.layout_style),
-                    summary = layoutStyle,
-                    icon = Icons.Default.Dashboard,
-                    onClick = { showLayoutDialog = true }
-                )
-
-                if (showLayoutDialog) {
-                    SingleOptionSelectionDialog(
-                        title = stringResource(id = R.string.layout_style),
-                        options = listOf("PUZZLE", "LIST", "GRID"),
-                        selectedOption = layoutStyle,
-                        onOptionSelected = { style ->
-                            layoutStyle = style
-                            Prefs.setString(context, "notif_layout_style", style)
-                        },
-                        onDismissRequest = { showLayoutDialog = false }
-                    )
-                }
             }
         }
 
@@ -322,6 +304,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () 
                             if (idx >= 0) viewModel.updateTheme(idx)
                         },
                         onDismissRequest = { showThemeDialog = false }
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                var showLayoutDialog by remember { mutableStateOf(false) }
+                val layoutStyleRaw by Prefs.getStringFlow(context, "dash_layout_style", "LIST")
+                    .collectAsState(initial = Prefs.getString(context, "dash_layout_style", "LIST") ?: "LIST")
+                val layoutStyle = layoutStyleRaw ?: "LIST"
+
+                SettingsItem(
+                    title = "Dashboard Layout",
+                    summary = layoutStyle,
+                    icon = Icons.Default.Dashboard,
+                    onClick = { showLayoutDialog = true }
+                )
+
+                if (showLayoutDialog) {
+                    SingleOptionSelectionDialog(
+                        title = "Dashboard Layout",
+                        options = listOf("PUZZLE", "LIST", "GRID"),
+                        selectedOption = layoutStyle,
+                        onOptionSelected = { style ->
+                            Prefs.setString(context, "dash_layout_style", style)
+                        },
+                        onDismissRequest = { showLayoutDialog = false }
                     )
                 }
 
