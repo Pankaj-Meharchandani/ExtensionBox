@@ -101,6 +101,7 @@ fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
             "connection"  -> entity.data["conn.rssi"]?.substringBefore(" ")?.toFloatOrNull()?.let { -it }
             "screen"      -> entity.data["screen.on_time"]?.let { parseDurationToMinutes(it) }
             "screen_time" -> entity.data["screen_time.total_screen_time_ms"]?.toFloatOrNull()?.div(60000f)
+                ?: entity.data["screen_time.total_screen_time"]?.let { parseDurationToMinutes(it) }
             "uptime"      -> entity.data["uptime.duration"]?.let { parseDurationToMinutes(it) }
             "steps"       -> entity.data["steps.today"]?.replace(",", "")?.toFloatOrNull()
             "speedtest"   -> entity.data["speedtest.download"]?.let { parseSpeedToKbps(it) }

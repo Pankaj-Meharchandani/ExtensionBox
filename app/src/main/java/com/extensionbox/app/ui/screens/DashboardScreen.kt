@@ -343,88 +343,62 @@ private fun DashboardLayoutBar(
     moduleCount: Int,
     onLayoutSelected: (String) -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Active Cards",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+            ) {
                 Text(
-                    text = "Dashboard",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "$moduleCount active cards",
+                    text = "$moduleCount",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                LayoutChip(
-                    selected = layoutStyle == "LIST",
-                    icon = Icons.Default.Menu,
-                    label = "List",
-                    onClick = { onLayoutSelected("LIST") }
-                )
-                LayoutChip(
-                    selected = layoutStyle == "GRID",
-                    icon = Icons.Default.GridView,
-                    label = "Grid",
-                    onClick = { onLayoutSelected("GRID") }
-                )
-                LayoutChip(
-                    selected = layoutStyle == "PUZZLE",
-                    icon = Icons.Default.Dashboard,
-                    label = "Puzzle",
-                    onClick = { onLayoutSelected("PUZZLE") }
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
         }
-    }
-}
 
-@Composable
-private fun LayoutChip(
-    selected: Boolean,
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-        )
-    ) {
+        val (currentIcon, currentLabel, nextStyle) = when (layoutStyle) {
+            "GRID" -> Triple(Icons.Default.GridView, "Grid", "PUZZLE")
+            "PUZZLE" -> Triple(Icons.Default.Dashboard, "Puzzle", "LIST")
+            else -> Triple(Icons.Default.Menu, "List", "GRID")
+        }
+
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            modifier = Modifier
+                .clip(CircleShape)
+                .clickable { onLayoutSelected(nextStyle) }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(15.dp),
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                imageVector = currentIcon,
+                contentDescription = currentLabel,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                text = currentLabel,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -1311,7 +1285,7 @@ fun KernelCard(
                 )
             }
 
-            if (module != null && sysAccess != null) {
+            if (module != null && sysAccess != null && key in setOf("app_usage", "privacy", "speedtest")) {
                 Spacer(Modifier.height(8.dp))
                 module.dashboardContent(context, sysAccess)
             }

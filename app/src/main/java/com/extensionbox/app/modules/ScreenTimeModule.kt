@@ -119,6 +119,7 @@ class ScreenTimeModule : Module {
     override fun dataPoints(): LinkedHashMap<String, String> {
         val d = LinkedHashMap<String, String>()
         d["screen_time.total_screen_time"] = Fmt.duration(totalScreenTimeMs)
+        d["screen_time.total_screen_time_ms"] = "$totalScreenTimeMs"
         d["screen_time.total_unlocks"] = "$totalUnlocksCount"
         d["screen_time.avg_time_per_unlock"] = Fmt.duration(avgTimePerUnlockMs)
         val top = usageList.firstOrNull()
@@ -135,60 +136,7 @@ class ScreenTimeModule : Module {
 
     @Composable
     override fun dashboardContent(ctx: Context, sys: SystemAccess) {
-        val hasPermission = remember { mutableStateOf(checkPermission(ctx)) }
-        if (!hasPermission.value) {
-            PermissionCard(ctx)
-            return
-        }
-
-        var data by remember { mutableStateOf<ScreenTimeData?>(null) }
-        LaunchedEffect(Unit) {
-            withContext(Dispatchers.IO) {
-                data = loadScreenTimeData(ctx)
-            }
-        }
-
-        val currentData = data ?: ScreenTimeData(totalScreenTimeMs, totalUnlocksCount, avgTimePerUnlockMs, usageList)
-        val topApps = currentData.usageList.take(5)
-        val maxAppTime = topApps.firstOrNull()?.totalTimeMs ?: 1L
-        val pm = ctx.packageManager
-
-        Column(
-            modifier = Modifier.padding(top = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Screen Time",
-                    value = Fmt.duration(currentData.totalScreenTimeMs),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Unlocks",
-                    value = "${currentData.totalUnlocksCount}",
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Avg / Unlock",
-                    value = Fmt.duration(currentData.avgTimePerUnlockMs),
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-            }
-
-            if (topApps.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    topApps.forEach { info ->
-                        AppScreenTimeRow(info = info, maxAppTimeMs = maxAppTime, pm = pm)
-                    }
-                }
-            }
-        }
+        // Closed by default on dashboard; details shown in detail screen via composableContent
     }
 
     @Composable
@@ -233,6 +181,30 @@ class ScreenTimeModule : Module {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Screen Time",
+                    value = Fmt.duration(currentData.totalScreenTimeMs),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Unlocks",
+                    value = "${currentData.totalUnlocksCount}",
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Avg / Unlock",
+                    value = Fmt.duration(currentData.avgTimePerUnlockMs),
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
 
             OutlinedTextField(
                 value = searchQuery,
