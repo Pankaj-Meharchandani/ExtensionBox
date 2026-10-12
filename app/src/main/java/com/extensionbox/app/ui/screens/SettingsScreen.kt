@@ -490,6 +490,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () 
         SettingsGroup(title = stringResource(id = R.string.about), icon = Icons.Default.Info) {
             AppCard {
                 SettingsItem(
+                    title = "Welcome Guide",
+                    summary = "Replay intro & setup guide",
+                    icon = Icons.Default.Explore,
+                    onClick = {
+                        Prefs.setBool(context, "onboarding_completed", false)
+                    }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                SettingsItem(
                     title = stringResource(id = R.string.about),
                     summary = stringResource(id = R.string.about_description),
                     icon = Icons.Default.Info,

@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeIndex by Prefs.getIntFlow(this, "app_theme", ThemeHelper.MONET).collectAsState(initial = ThemeHelper.MONET)
+            val onboardingCompleted by Prefs.getBoolFlow(this, "onboarding_completed", false).collectAsState(initial = null)
             
             // Re-apply activity theme when index changes (for window background etc)
             LaunchedEffect(themeIndex) {
@@ -61,7 +62,24 @@ class MainActivity : ComponentActivity() {
             }
 
             ExtensionBoxTheme {
-                MainApp()
+                when (onboardingCompleted) {
+                    false -> {
+                        WelcomeScreen(
+                            onFinish = {
+                                Prefs.setBool(this@MainActivity, "onboarding_completed", true)
+                            }
+                        )
+                    }
+                    true -> {
+                        MainApp()
+                    }
+                    null -> {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {}
+                    }
+                }
             }
         }
     }
