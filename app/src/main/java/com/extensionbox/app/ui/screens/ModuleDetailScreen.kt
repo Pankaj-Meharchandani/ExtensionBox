@@ -61,10 +61,8 @@ fun ModuleDetailScreen(
     viewModel: DashboardViewModel
 ) {
     val context = LocalContext.current
-    val dashData = viewModel.dashData.collectAsState().value
     val sysAccess = viewModel.sysAccess.collectAsState().value
 
-    val data = dashData[moduleKey] ?: emptyMap()
     val module = MonitorService.getLiveModule(moduleKey) ?: com.extensionbox.app.ui.ModuleRegistry.getModule(moduleKey)
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -215,26 +213,6 @@ fun ModuleDetailScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (data.isNotEmpty()) {
-                        Text(
-                            text = stringResource(id = R.string.real_time_metrics),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        val items = data.toList()
-                        items.chunked(2).forEach { rowItems ->
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                rowItems.forEach { pair ->
-                                    val label = pair.first.substringAfterLast('.').replace("_", " ").replaceFirstChar { it.uppercase() }
-                                    StatItem(label = label, value = pair.second, modifier = Modifier.weight(1f))
-                                }
-                                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
-                            }
-                        }
-                    }
-
                     module.composableContent(context, sysAccess)
                 }
             }

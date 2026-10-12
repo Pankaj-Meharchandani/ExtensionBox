@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Process
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,7 +19,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,6 +52,10 @@ data class AppUsageInfo(
     val batteryPctEstimate: Float,
     val lastTimeUsedMs: Long
 )
+
+enum class AppUsageSortOrder {
+    TIME, LAUNCHES, BATTERY, SESSION
+}
 
 class AppUsageModule : Module {
     private var ctx: Context? = null
@@ -161,6 +166,7 @@ class AppUsageModule : Module {
 
         var dataList by remember { mutableStateOf<List<AppUsageInfo>?>(null) }
         var searchQuery by remember { mutableStateOf("") }
+        var sortOrder by remember { mutableStateOf(AppUsageSortOrder.TIME) }
 
         LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
@@ -170,88 +176,257 @@ class AppUsageModule : Module {
 
         val currentList = dataList ?: usageList
         val pm = ctx.packageManager
-        val maxTime = currentList.firstOrNull()?.totalTimeMs ?: 1L
+
+        val filteredApps = remember(currentList, searchQuery, sortOrder) {
+            val filtered = if (searchQuery.isBlank()) {
+                currentList
+            } else {
+                currentList.filter {
+                    it.appLabel.contains(searchQuery, ignoreCase = true) ||
+                            it.packageName.contains(searchQuery, ignoreCase = true)
+                }
+            }
+            when (sortOrder) {
+                AppUsageSortOrder.TIME -> filtered.sortedByDescending { it.totalTimeMs }
+                AppUsageSortOrder.LAUNCHES -> filtered.sortedByDescending { it.openCount }
+                AppUsageSortOrder.BATTERY -> filtered.sortedByDescending { it.batteryPctEstimate }
+                AppUsageSortOrder.SESSION -> filtered.sortedByDescending { it.avgSessionMs }
+            }
+        }
+
+        val maxTimeInFiltered = filteredApps.firstOrNull()?.totalTimeMs?.toFloat()?.coerceAtLeast(1f) ?: 1f
         val totalTimeMs = currentList.sumOf { it.totalTimeMs }
         val totalOpens = currentList.sumOf { it.openCount }
         val totalBattery = currentList.sumOf { it.batteryPctEstimate.toDouble() }.toFloat()
 
-        val filteredApps = remember(currentList, searchQuery) {
-            if (searchQuery.isBlank()) currentList
-            else currentList.filter { info ->
-                info.appLabel.contains(searchQuery, ignoreCase = true) ||
-                        info.packageName.contains(searchQuery, ignoreCase = true)
-            }
-        }
-
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = "App Usage Breakdown",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // --- 1. Hero Summary Card with Proportions Bar ---
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Screen Time",
-                    value = Fmt.duration(totalTimeMs),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Total Opens",
-                    value = "$totalOpens",
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Est. Battery",
-                    value = String.format(Locale.US, "%.1f%%", totalBattery),
-                    color = MaterialTheme.colorScheme.tertiary
-                )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = Fmt.duration(totalTimeMs),
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "App Screen Time Today • ${currentList.size} Apps Tracked",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Apps,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Multi-color proportions bar
+                    val topFive = currentList.take(5)
+                    if (totalTimeMs > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            val barColors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary,
+                                MaterialTheme.colorScheme.tertiary,
+                                Color(0xFFFF9100),
+                                Color(0xFF2979FF)
+                            )
+                            topFive.forEachIndexed { idx, info ->
+                                val weight = info.totalTimeMs.toFloat() / totalTimeMs.toFloat().coerceAtLeast(1f)
+                                if (weight > 0.01f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .weight(weight)
+                                            .background(barColors[idx % barColors.size])
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    // 3 Stat Badges Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        UsagePillStat(
+                            label = "Active Apps",
+                            value = "${currentList.size}",
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        UsagePillStat(
+                            label = "Total Opens",
+                            value = "$totalOpens",
+                            color = Color(0xFF2979FF),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        UsagePillStat(
+                            label = "Est. Battery",
+                            value = String.format(Locale.US, "%.1f%%", totalBattery),
+                            color = Color(0xFFFF9100),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
 
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search app usage...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp)
-            )
+            // --- 2. Top 3 Apps Podium Leaderboard ---
+            if (currentList.size >= 3 && searchQuery.isBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Top Used Applications",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(14.dp))
 
-            if (currentList.isEmpty() && dataList == null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val podiumColors = listOf(Color(0xFFFFD700), Color(0xFFC0C0C0), Color(0xFFCD7F32))
+                            currentList.take(3).forEachIndexed { rank, info ->
+                                PodiumAppCard(
+                                    rank = rank + 1,
+                                    info = info,
+                                    accentColor = podiumColors[rank],
+                                    pm = pm,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { openAppSettings(ctx, info.packageName) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- 3. Search & Filter Bar ---
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search app name or package...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = sortOrder == AppUsageSortOrder.TIME,
+                            onClick = { sortOrder = AppUsageSortOrder.TIME },
+                            label = { Text("Time") },
+                            leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        )
+                        FilterChip(
+                            selected = sortOrder == AppUsageSortOrder.LAUNCHES,
+                            onClick = { sortOrder = AppUsageSortOrder.LAUNCHES },
+                            label = { Text("Opens") },
+                            leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        )
+                        FilterChip(
+                            selected = sortOrder == AppUsageSortOrder.BATTERY,
+                            onClick = { sortOrder = AppUsageSortOrder.BATTERY },
+                            label = { Text("Battery") },
+                            leadingIcon = { Icon(Icons.Default.BatteryChargingFull, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        )
+                    }
+                }
+            }
+
+            // --- 4. Detailed App Cards List ---
+            if (filteredApps.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    Text(
+                        text = if (searchQuery.isNotEmpty()) "No apps found matching '$searchQuery'" else "No app usage detected today.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            } else if (filteredApps.isEmpty()) {
-                Text(
-                    text = if (searchQuery.isBlank()) "No app usage detected today." else "No apps found matching '$searchQuery'",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
-                )
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "App Usage Details (${filteredApps.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
                     filteredApps.forEach { info ->
-                        AppUsageRow(
+                        AppUsageDetailCard(
                             info = info,
-                            maxTimeMs = maxTime,
+                            maxTimeMs = maxTimeInFiltered,
                             pm = pm,
                             onClick = { openAppSettings(ctx, info.packageName) }
                         )
@@ -377,51 +552,199 @@ private fun PermissionCard(ctx: Context) {
 }
 
 @Composable
-private fun MetricCard(
-    modifier: Modifier = Modifier,
-    title: String,
+private fun UsagePillStat(
+    label: String,
     value: String,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        shape = RoundedCornerShape(14.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            modifier = Modifier.padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = color
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                maxLines = 1
             )
         }
     }
 }
 
 @Composable
-private fun AppUsageRow(
+private fun PodiumAppCard(
+    rank: Int,
     info: AppUsageInfo,
-    maxTimeMs: Long,
+    accentColor: Color,
+    pm: PackageManager,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = accentColor.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f)),
+        modifier = modifier.clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accentColor,
+                modifier = Modifier.size(22.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "#$rank",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color.Black
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            AppIconBox(packageName = info.packageName, pm = pm, size = 38)
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = info.appLabel,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(2.dp))
+
+            Text(
+                text = Fmt.duration(info.totalTimeMs),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Text(
+                text = "${info.openCount} opens",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppUsageDetailCard(
+    info: AppUsageInfo,
+    maxTimeMs: Float,
     pm: PackageManager,
     onClick: () -> Unit
 ) {
-    var appIcon by remember(info.packageName) { mutableStateOf<ImageBitmap?>(null) }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AppIconBox(packageName = info.packageName, pm = pm, size = 40)
 
-    LaunchedEffect(info.packageName) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = info.appLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = Fmt.duration(info.totalTimeMs),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${info.openCount} opens • Avg ${Fmt.duration(info.avgSessionMs)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "~${String.format(Locale.US, "%.1f%%", info.batteryPctEstimate)} bat",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                LinearProgressIndicator(
+                    progress = { (info.totalTimeMs.toFloat() / maxTimeMs).coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppIconBox(packageName: String, pm: PackageManager, size: Int = 36) {
+    var appIcon by remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(packageName) {
         withContext(Dispatchers.IO) {
             try {
-                val d = pm.getApplicationIcon(info.packageName)
+                val d = pm.getApplicationIcon(packageName)
                 val bm = Bitmap.createBitmap(d.intrinsicWidth.coerceAtLeast(1), d.intrinsicHeight.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
                 val c = Canvas(bm)
                 d.setBounds(0, 0, c.width, c.height)
@@ -431,80 +754,27 @@ private fun AppUsageRow(
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        val icon = appIcon
-        if (icon != null) {
-            Image(
-                bitmap = icon,
-                contentDescription = null,
-                modifier = Modifier.size(36.dp).clip(CircleShape)
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = info.appLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                Text(
-                    text = Fmt.duration(info.totalTimeMs),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
+    val icon = appIcon
+    if (icon != null) {
+        Image(
+            bitmap = icon,
+            contentDescription = null,
+            modifier = Modifier.size(size.dp).clip(CircleShape)
+        )
+    } else {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.size(size.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Android,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size((size * 0.55f).dp)
                 )
             }
-
-            Spacer(Modifier.height(2.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${info.openCount} opens • Avg ${Fmt.duration(info.avgSessionMs)} / open",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "~${String.format(Locale.US, "%.1f%%", info.batteryPctEstimate)} bat",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            LinearProgressIndicator(
-                progress = { (info.totalTimeMs.toFloat() / maxTimeMs.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
         }
     }
 }
