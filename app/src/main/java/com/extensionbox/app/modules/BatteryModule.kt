@@ -9,23 +9,22 @@ import android.content.IntentFilter
 import android.graphics.drawable.Drawable
 import android.os.BatteryManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
-import androidx.compose.material.icons.filled.BatteryChargingFull
-import androidx.compose.material.icons.filled.Power
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,63 +106,115 @@ class BatteryModule : Module {
             }
         }
 
+        val primaryColor = when {
+            isCharge -> Color(0xFF00E676)
+            level <= 15 -> Color(0xFFFF1744)
+            level <= 30 -> Color(0xFFFF9100)
+            else -> MaterialTheme.colorScheme.primary
+        }
+
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // --- 1. Battery Health & Live Metrics Bento Grid ---
+            // --- 1. Hero Battery Header Visual Card ---
             Surface(
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "$level%",
-                                style = MaterialTheme.typography.displayMedium,
-                                fontWeight = FontWeight.Black,
-                                color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = if (isCharge) "Charging (${pluggedType()})" else "Discharging • ${timeLeft()}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        // Circular battery gauge
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(96.dp)
+                        ) {
+                            val trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            val progressColor = primaryColor
+                            Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                                drawArc(
+                                    color = trackColor,
+                                    startAngle = 135f,
+                                    sweepAngle = 270f,
+                                    useCenter = false,
+                                    style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                                drawArc(
+                                    color = progressColor,
+                                    startAngle = 135f,
+                                    sweepAngle = 270f * (level / 100f).coerceIn(0f, 1f),
+                                    useCenter = false,
+                                    style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "$level%",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = primaryColor
+                                )
+                                Text(
+                                    text = if (isCharge) "Charging" else "Battery",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isCharge) Color(0xFF00E676).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            modifier = Modifier.size(52.dp)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = healthStr(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+                            Text(
+                                text = if (isCharge) "Plugged In (${pluggedType()})" else "Discharging",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = timeLeft(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = primaryColor
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            // Badges Row
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                MetricPill(
+                                    text = String.format(Locale.US, "%.1f W", watts),
+                                    color = primaryColor
+                                )
+                                MetricPill(
+                                    text = "$absMa mA",
+                                    color = MaterialTheme.colorScheme.secondary
                                 )
                             }
                         }
                     }
 
                     Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(12.dp))
 
-                    // 3 Stat Items Row
+                    // 3 Stat Boxes Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         BatteryStatBox(
-                            label = if (isCharge) "Charge Rate" else "Discharge Rate",
+                            label = if (isCharge) "Charge Speed" else "Discharge Rate",
                             value = "$absMa mA",
                             subValue = String.format(Locale.US, "%.1f W", watts),
                             color = if (isCharge) Color(0xFF00E676) else Color(0xFFFF5252),
@@ -179,7 +230,7 @@ class BatteryModule : Module {
                         )
                         Spacer(Modifier.width(8.dp))
                         BatteryStatBox(
-                            label = "Voltage",
+                            label = "Voltage & Tech",
                             value = String.format(Locale.US, "%.2f V", voltage / 1000f),
                             subValue = technology ?: "Li-ion",
                             color = Color(0xFF2979FF),
@@ -189,22 +240,19 @@ class BatteryModule : Module {
 
                     if (sys.isEnhanced() && realHealthPct > 0) {
                         Spacer(Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        Spacer(Modifier.height(12.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Health & Cycles",
+                                text = "Battery Retention & Cycles",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "$realHealthPct% Health • ${if (cycleCount >= 0) "$cycleCount cycles" else "Design $designCap mAh"}",
+                                text = "$realHealthPct% • ${if (cycleCount >= 0) "$cycleCount cycles" else "Design $designCap mAh"}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -214,7 +262,87 @@ class BatteryModule : Module {
                 }
             }
 
-            // --- 2. App Battery Drain Breakdown ("Which app used most battery") ---
+            // --- 2. Screen On / Standby Active Drain Card ---
+            val totalOnMs = getTotalOn()
+            val totalOffMs = getTotalOff()
+
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Screen & Standby Drain Today",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            modifier = Modifier.weight(1f).padding(end = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Screen On",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = Fmt.duration(totalOnMs),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                val curDrain = if (screenOn) abs(periodStartLevel - level).toFloat() else 0f
+                                val totalOnDrain = onDrain + curDrain
+                                Text(
+                                    text = "Drain: ${String.format(Locale.US, "%.1f", totalOnDrain)}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.weight(1f).padding(start = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Screen Off (Standby)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = Fmt.duration(totalOffMs),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Idle Drain: ${String.format(Locale.US, "%.1f", offDrain)}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- 3. App Battery Drain Breakdown ---
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
@@ -229,7 +357,7 @@ class BatteryModule : Module {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Estimated battery drain based on active foreground screen time",
+                        text = "Estimated battery drain allocated by active foreground screen time",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -303,6 +431,22 @@ class BatteryModule : Module {
                     }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun MetricPill(text: String, color: Color) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = color.copy(alpha = 0.12f)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            )
         }
     }
 
@@ -847,8 +991,6 @@ class BatteryModule : Module {
         if (lowFired && level > lowThresh + 5) {
             Prefs.setBool(ctx, "bat_low_fired", false)
         }
-
-
 
         val limitMin = Prefs.getInt(ctx, "scr_time_limit", 0)
         if (limitMin > 0) {
