@@ -5,6 +5,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -15,7 +16,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,11 +53,22 @@ data class AppUsageInfo(
     val openCount: Int,
     val avgSessionMs: Long,
     val batteryPctEstimate: Float,
-    val lastTimeUsedMs: Long
+    val lastTimeUsedMs: Long,
+    val isSystemApp: Boolean
+)
+
+data class TimeOfDayUsage(
+    val morningMs: Long,
+    val afternoonMs: Long,
+    val nightMs: Long
 )
 
 enum class AppUsageSortOrder {
     TIME, LAUNCHES, BATTERY, SESSION
+}
+
+enum class AppCategoryFilter {
+    ALL, USER, SYSTEM, UNUSED
 }
 
 class AppUsageModule : Module {
@@ -134,9 +148,7 @@ class AppUsageModule : Module {
     override fun checkAlerts(ctx: Context) {}
 
     @Composable
-    override fun dashboardContent(ctx: Context, sys: SystemAccess) {
-        // Details shown in detail screen via composableContent
-    }
+    override fun dashboardContent(ctx: Context, sys: SystemAccess) {}
 
     @Composable
     override fun settingsContent(ctx: Context, sys: SystemAccess) {
@@ -165,32 +177,46 @@ class AppUsageModule : Module {
         }
 
         var dataList by remember { mutableStateOf<List<AppUsageInfo>?>(null) }
+        var timeOfDayData by remember { mutableStateOf<TimeOfDayUsage?>(null) }
         var searchQuery by remember { mutableStateOf("") }
         var sortOrder by remember { mutableStateOf(AppUsageSortOrder.TIME) }
+        var categoryFilter by remember { mutableStateOf(AppCategoryFilter.ALL) }
 
         LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
-                dataList = loadAppUsageData(ctx)
+                val list = loadAppUsageData(ctx)
+                val tod = loadTimeOfDayDistribution(ctx)
+                dataList = list
+                timeOfDayData = tod
             }
         }
 
         val currentList = dataList ?: usageList
         val pm = ctx.packageManager
 
-        val filteredApps = remember(currentList, searchQuery, sortOrder) {
-            val filtered = if (searchQuery.isBlank()) {
-                currentList
+        val categoryFiltered = remember(currentList, categoryFilter) {
+            when (categoryFilter) {
+                AppCategoryFilter.ALL -> currentList
+                AppCategoryFilter.USER -> currentList.filter { !it.isSystemApp }
+                AppCategoryFilter.SYSTEM -> currentList.filter { it.isSystemApp }
+                AppCategoryFilter.UNUSED -> currentList.filter { it.totalTimeMs == 0L || (System.currentTimeMillis() - it.lastTimeUsedMs) > (7 * 24 * 60 * 60 * 1000L) }
+            }
+        }
+
+        val filteredApps = remember(categoryFiltered, searchQuery, sortOrder) {
+            val searched = if (searchQuery.isBlank()) {
+                categoryFiltered
             } else {
-                currentList.filter {
+                categoryFiltered.filter {
                     it.appLabel.contains(searchQuery, ignoreCase = true) ||
                             it.packageName.contains(searchQuery, ignoreCase = true)
                 }
             }
             when (sortOrder) {
-                AppUsageSortOrder.TIME -> filtered.sortedByDescending { it.totalTimeMs }
-                AppUsageSortOrder.LAUNCHES -> filtered.sortedByDescending { it.openCount }
-                AppUsageSortOrder.BATTERY -> filtered.sortedByDescending { it.batteryPctEstimate }
-                AppUsageSortOrder.SESSION -> filtered.sortedByDescending { it.avgSessionMs }
+                AppUsageSortOrder.TIME -> searched.sortedByDescending { it.totalTimeMs }
+                AppUsageSortOrder.LAUNCHES -> searched.sortedByDescending { it.openCount }
+                AppUsageSortOrder.BATTERY -> searched.sortedByDescending { it.batteryPctEstimate }
+                AppUsageSortOrder.SESSION -> searched.sortedByDescending { it.avgSessionMs }
             }
         }
 
@@ -210,20 +236,20 @@ class AppUsageModule : Module {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "App Usage Breakdown",
+                text = "App Usage Analytics",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
 
-            // 3 Top Metric Cards Row (Clickable & Interchange Focus)
+            // 3 Top Metric Cards Row (Reduced side paddings, clickable & interchange focus)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
@@ -251,8 +277,52 @@ class AppUsageModule : Module {
                 )
             }
 
-            // Search Bar & Sort Filter Chips
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Time-of-Day Peak Usage Breakdown Card (No emojis)
+            timeOfDayData?.let { tod ->
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Peak Time-of-Day Distribution",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            TimeOfDayPill(
+                                label = "Morning",
+                                durationStr = Fmt.duration(tod.morningMs),
+                                color = Color(0xFFFFB74D),
+                                modifier = Modifier.weight(1f)
+                            )
+                            TimeOfDayPill(
+                                label = "Afternoon",
+                                durationStr = Fmt.duration(tod.afternoonMs),
+                                color = Color(0xFF2979FF),
+                                modifier = Modifier.weight(1f)
+                            )
+                            TimeOfDayPill(
+                                label = "Evening / Night",
+                                durationStr = Fmt.duration(tod.nightMs),
+                                color = Color(0xFFAB47BC),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Category Filters & Search Controls
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -267,29 +337,60 @@ class AppUsageModule : Module {
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
 
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FilterChip(
+                        selected = categoryFilter == AppCategoryFilter.ALL,
+                        onClick = { categoryFilter = AppCategoryFilter.ALL },
+                        label = { Text("All (${currentList.size})") }
+                    )
+                    FilterChip(
+                        selected = categoryFilter == AppCategoryFilter.USER,
+                        onClick = { categoryFilter = AppCategoryFilter.USER },
+                        label = { Text("User Apps") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+                    FilterChip(
+                        selected = categoryFilter == AppCategoryFilter.SYSTEM,
+                        onClick = { categoryFilter = AppCategoryFilter.SYSTEM },
+                        label = { Text("System") },
+                        leadingIcon = { Icon(Icons.Default.Android, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+                    FilterChip(
+                        selected = categoryFilter == AppCategoryFilter.UNUSED,
+                        onClick = { categoryFilter = AppCategoryFilter.UNUSED },
+                        label = { Text("Unused (7d+)") },
+                        leadingIcon = { Icon(Icons.Default.HourglassDisabled, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+                }
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     FilterChip(
                         selected = sortOrder == AppUsageSortOrder.TIME,
                         onClick = { sortOrder = AppUsageSortOrder.TIME },
-                        label = { Text("Time") },
+                        label = { Text("Sort Time") },
                         leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
                     FilterChip(
                         selected = sortOrder == AppUsageSortOrder.LAUNCHES,
                         onClick = { sortOrder = AppUsageSortOrder.LAUNCHES },
-                        label = { Text("Opens") },
+                        label = { Text("Sort Opens") },
                         leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
                     FilterChip(
                         selected = sortOrder == AppUsageSortOrder.BATTERY,
                         onClick = { sortOrder = AppUsageSortOrder.BATTERY },
-                        label = { Text("Battery") },
+                        label = { Text("Sort Battery") },
                         leadingIcon = { Icon(Icons.Default.BatteryChargingFull, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
                 }
@@ -307,13 +408,13 @@ class AppUsageModule : Module {
                 }
             } else if (filteredApps.isEmpty()) {
                 Text(
-                    text = if (searchQuery.isBlank()) "No app usage detected today." else "No apps found matching '$searchQuery'",
+                    text = if (searchQuery.isBlank()) "No apps in this category." else "No apps found matching '$searchQuery'",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(8.dp)
                 )
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     filteredApps.forEach { info ->
                         AppUsageRow(
                             info = info,
@@ -395,16 +496,62 @@ private fun loadAppUsageData(context: Context): List<AppUsageInfo> {
         val opens = (launchCounts[pkg] ?: 1).coerceAtLeast(1)
         val avg = time / opens
         val bat = if (grandTotalMs > 0) (time.toFloat() / grandTotalMs.toFloat()) * estimatedDischarge else 0f
-        val label = try {
+        val (label, isSys) = try {
             val info = pm.getApplicationInfo(pkg, 0)
-            pm.getApplicationLabel(info).toString()
+            val l = pm.getApplicationLabel(info).toString()
+            val sys = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            Pair(l, sys)
         } catch (_: Exception) {
-            pkg.substringAfterLast('.')
+            Pair(pkg.substringAfterLast('.'), false)
         }
-        list.add(AppUsageInfo(pkg, label, time, opens, avg, bat, lastUsedMap[pkg] ?: 0L))
+        list.add(AppUsageInfo(pkg, label, time, opens, avg, bat, lastUsedMap[pkg] ?: 0L, isSys))
     }
 
     return list.sortedByDescending { it.totalTimeMs }
+}
+
+private fun loadTimeOfDayDistribution(context: Context): TimeOfDayUsage {
+    val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        ?: return TimeOfDayUsage(0L, 0L, 0L)
+
+    val now = System.currentTimeMillis()
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val startTime = cal.timeInMillis
+
+    var morning = 0L
+    var afternoon = 0L
+    var night = 0L
+
+    try {
+        val events = usm.queryEvents(startTime, now)
+        val event = UsageEvents.Event()
+        var lastResumedTime = 0L
+        val hourCal = Calendar.getInstance()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val type = event.eventType
+            if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
+                lastResumedTime = event.timeStamp
+            } else if ((type == UsageEvents.Event.ACTIVITY_PAUSED || type == UsageEvents.Event.ACTIVITY_STOPPED) && lastResumedTime > 0) {
+                val duration = (event.timeStamp - lastResumedTime).coerceAtLeast(0)
+                hourCal.timeInMillis = lastResumedTime
+                when (hourCal.get(Calendar.HOUR_OF_DAY)) {
+                    in 6..11 -> morning += duration
+                    in 12..17 -> afternoon += duration
+                    else -> night += duration
+                }
+                lastResumedTime = 0L
+            }
+        }
+    } catch (_: Exception) {}
+
+    return TimeOfDayUsage(morning, afternoon, night)
 }
 
 private fun openAppSettings(c: Context, packageName: String) {
@@ -454,12 +601,12 @@ private fun MetricCard(
 ) {
     Surface(
         modifier = modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = if (selected) color.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = if (selected) BorderStroke(1.5.dp, color) else null
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -475,6 +622,41 @@ private fun MetricCard(
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 color = if (selected) color else MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimeOfDayPill(
+    label: String,
+    durationStr: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = durationStr,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                maxLines = 1
             )
         }
     }
@@ -533,9 +715,23 @@ private fun AppUsageRow(
         AppUsageSortOrder.SESSION -> "${Fmt.duration(info.totalTimeMs)} time • ${info.openCount} opens"
     }
 
+    val sessionBadge = when {
+        info.openCount >= 10 && info.avgSessionMs < 120_000L -> "Quick Bursts"
+        info.avgSessionMs >= 600_000L -> "Deep Session"
+        else -> null
+    }
+
+    val powerBadge = when {
+        info.batteryPctEstimate >= 10f -> "High Drain"
+        info.batteryPctEstimate <= 2f -> "Efficient"
+        else -> null
+    }
+
+    val isOveruseWarning = info.totalTimeMs >= 3_600_000L
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -561,14 +757,27 @@ private fun AppUsageRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = info.appLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
-                )
+                ) {
+                    Text(
+                        text = info.appLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isOveruseWarning) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "1h+ Limit",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF9100)
+                        )
+                    }
+                }
                 Text(
                     text = topRightVal,
                     style = MaterialTheme.typography.labelLarge,
@@ -579,11 +788,25 @@ private fun AppUsageRow(
 
             Spacer(Modifier.height(2.dp))
 
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (sessionBadge != null || powerBadge != null) {
+                    Text(
+                        text = sessionBadge ?: powerBadge!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
 
             Spacer(Modifier.height(4.dp))
 
