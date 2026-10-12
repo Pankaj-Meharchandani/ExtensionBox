@@ -97,6 +97,8 @@ class BatteryModule : Module {
         val isCharge = status == BatteryManager.BATTERY_STATUS_CHARGING
         val absMa = abs(currentMa)
         val watts = absMa * voltage / 1_000_000f
+        val remMah = sys.readRemainingCapacity(ctx)
+        val tempC = temp / 10f
 
         var appBatteryUsage by remember { mutableStateOf<List<AppBatteryUsageInfo>>(emptyList()) }
 
@@ -126,7 +128,7 @@ class BatteryModule : Module {
                 color = MaterialTheme.colorScheme.primary
             )
 
-            // 3 Metric Cards Row (matching ScreenTimeModule)
+            // 3 Top Metric Cards Row (matching ScreenTimeModule)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -145,7 +147,7 @@ class BatteryModule : Module {
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "Voltage & Tech",
+                    title = "Voltage",
                     value = String.format(Locale.US, "%.2f V", voltage / 1000f),
                     color = Color(0xFF2979FF)
                 )
@@ -218,7 +220,7 @@ class BatteryModule : Module {
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "Power Draw: ${String.format(Locale.US, "%.1f W", watts)} • Health: ${if (realHealthPct > 0) "$realHealthPct%" else healthStr()}",
+                                text = "Power: ${String.format(Locale.US, "%.1f W", watts)} • Temp: ${Fmt.temp(tempC)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -227,12 +229,70 @@ class BatteryModule : Module {
                 }
             }
 
-            // Screen On / Standby Active Drain Section
+            // Real-Time Hardware & Technical Specs Grid Card
+            Text(
+                text = "Hardware & Technical Specifications",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val specList = listOf(
+                        "Status" to statusStr(),
+                        "Health" to healthStr(),
+                        "Time Left" to timeLeft(),
+                        "Remaining Capacity" to if (remMah > 0) "$remMah mAh" else "—",
+                        "Design Capacity" to "$designCap mAh",
+                        "Actual Capacity" to if (actualCap > 0) "$actualCap mAh" else "—",
+                        "Technology" to (technology ?: "Li-ion"),
+                        "Cycle Count" to if (cycleCount >= 0) "$cycleCount" else "—",
+                        "Real Health %" to if (realHealthPct > 0) "$realHealthPct%" else "—"
+                    )
+
+                    specList.chunked(2).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowItems.forEach { (label, value) ->
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = value,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            if (rowItems.size == 1) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Screen On & Off Standby Time & Drain Card
             val totalOnMs = getTotalOn()
             val totalOffMs = getTotalOff()
 
             Text(
-                text = "Screen & Standby Drain Today",
+                text = "Screen On & Standby Time",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -244,19 +304,19 @@ class BatteryModule : Module {
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "Screen On (${Fmt.duration(totalOnMs)})",
+                    title = "On Time (${Fmt.duration(totalOnMs)})",
                     value = "${String.format(Locale.US, "%.1f", onDrain + (if (screenOn) abs(periodStartLevel - level).toFloat() else 0f))}% Drain",
                     color = MaterialTheme.colorScheme.primary
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "Screen Off (${Fmt.duration(totalOffMs)})",
+                    title = "Off Time (${Fmt.duration(totalOffMs)})",
                     value = "${String.format(Locale.US, "%.1f", offDrain)}% Drain",
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
 
-            // App Battery Drain Breakdown Section
+            // App Battery Drain Breakdown
             if (appBatteryUsage.isNotEmpty()) {
                 Text(
                     text = "App Battery Drain Breakdown",
