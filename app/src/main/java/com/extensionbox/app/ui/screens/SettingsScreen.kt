@@ -350,19 +350,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onAboutClick: () 
                     )
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-                var expandCards by remember { mutableStateOf(Prefs.getBool(context, "dash_expand_cards", true)) }
-                SettingsToggle(
-                    title = stringResource(id = R.string.expandable_cards),
-                    summary = stringResource(id = R.string.show_expansion_toggle_on_dashboard),
-                    icon = Icons.Default.ViewStream,
-                    checked = expandCards,
-                    onCheckedChange = {
-                        expandCards = it
-                        Prefs.setBool(context, "dash_expand_cards", it)
-                    }
-                )
             }
         }
 
