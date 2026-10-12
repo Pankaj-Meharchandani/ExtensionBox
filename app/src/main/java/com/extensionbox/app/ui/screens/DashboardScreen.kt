@@ -68,7 +68,7 @@ private val ALL_DOCK_WIDGET_OPTIONS = listOf(
     "screen_time" to "Screen Time Today",
     "cpu" to "CPU Load",
     "ram" to "RAM Usage",
-    "thermal" to "Battery Temp",
+    "thermal" to "Thermals",
     "storage" to "Storage Usage",
     "data" to "Data Usage Today",
     "steps" to "Step Counter",
@@ -444,10 +444,7 @@ private fun DashboardEmptyState() {
 }
 
 fun getDockTargetModuleKey(dockKey: String): String {
-    return when (dockKey) {
-        "thermal" -> "battery"
-        else -> dockKey
-    }
+    return dockKey
 }
 
 fun parseUniqueDockKeys(rawStr: String): List<String> {
@@ -1071,11 +1068,13 @@ private fun extractDockWidgetData(
             DockWidgetInfo("uptime", "Uptime", uptimeStr, num, unit, 1.0f, "uptime")
         }
         "thermal" -> {
-            val temp = dashData["battery"]?.get("battery.temp") ?: "--"
+            val batTemp = dashData["thermal"]?.get("thermal.battery_temp")
+            val maxTemp = dashData["thermal"]?.get("thermal.max_temp")
+            val temp = batTemp ?: maxTemp ?: dashData["battery"]?.get("battery.temp") ?: "--"
             val tVal = temp.removeSuffix("°C").removeSuffix("°F").toFloatOrNull() ?: 0f
             val num = if (temp.contains("°")) temp.substringBefore("°") else temp
             val unit = if (temp.contains("°")) "°" + temp.substringAfter("°") else ""
-            DockWidgetInfo("thermal", context.getString(R.string.thermal), temp, num, unit, (tVal / 50f).coerceIn(0f, 1f), "battery")
+            DockWidgetInfo("thermal", context.getString(R.string.thermal), temp, num, unit, (tVal / 50f).coerceIn(0f, 1f), "thermal")
         }
         else -> {
             DockWidgetInfo(key, key.replaceFirstChar { it.uppercase() }, "--", "--", "", 0f, key)

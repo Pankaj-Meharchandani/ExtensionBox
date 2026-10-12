@@ -76,7 +76,6 @@ class BatteryModule : Module {
     private var cycleCount = -1
     private var realHealthPct = -1
     private var technology: String? = null
-    private var cpuTemp = Float.NaN
 
     // Screen tracking
     private var screenOn = true
@@ -99,7 +98,6 @@ class BatteryModule : Module {
         val isCharge = status == BatteryManager.BATTERY_STATUS_CHARGING
         val absMa = abs(currentMa)
         val watts = absMa * voltage / 1_000_000f
-        val tempC = temp / 10f
 
         var appBatteryUsage by remember { mutableStateOf<List<AppBatteryUsageInfo>>(emptyList()) }
 
@@ -159,7 +157,7 @@ class BatteryModule : Module {
 
                     Spacer(Modifier.height(16.dp))
 
-                    // 4 Stat Items Row
+                    // 3 Stat Items Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -173,10 +171,10 @@ class BatteryModule : Module {
                         )
                         Spacer(Modifier.width(8.dp))
                         BatteryStatBox(
-                            label = "Temperature",
-                            value = Fmt.temp(tempC),
-                            subValue = if (!cpuTemp.isNaN()) "CPU ${Fmt.temp(cpuTemp)}" else "Battery",
-                            color = Color(0xFFFF9100),
+                            label = "Battery Health",
+                            value = if (realHealthPct > 0) "$realHealthPct%" else healthStr(),
+                            subValue = "$designCap mAh",
+                            color = Color(0xFF00E676),
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -517,28 +515,7 @@ class BatteryModule : Module {
                     formatter = { "${it.toInt()}%" }
                 )
             }
-            var tempAlert by remember { mutableStateOf(Prefs.getBool(ctx, "bat_temp_alert", true)) }
-            SettingSwitch(
-                label = ctx.getString(R.string.battery_module_high_temp_alert),
-                checked = tempAlert,
-                onCheckedChange = {
-                    tempAlert = it
-                    Prefs.setBool(ctx, "bat_temp_alert", it)
-                }
-            )
-            if (tempAlert) {
-                var tempThresh by remember { mutableStateOf(Prefs.getInt(ctx, "bat_temp_thresh", 42).toFloat()) }
-                SettingSlider(
-                    label = ctx.getString(R.string.battery_module_temp_threshold),
-                    value = tempThresh,
-                    valueRange = 30f..60f,
-                    onValueChange = {
-                        tempThresh = it
-                        Prefs.setInt(ctx, "bat_temp_thresh", it.toInt())
-                    },
-                    formatter = { ctx.getString(R.string.battery_module_temp_formatter, it.toInt()) }
-                )
-            }
+
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
@@ -710,7 +687,6 @@ class BatteryModule : Module {
                 cycleCount = s.readCycleCount()
                 realHealthPct = s.readRealHealthPercentage(c)
                 technology = s.readBatteryTechnology()
-                cpuTemp = s.readCpuTemp()
 
                 if (actualCap > 0) {
                     designCap = actualCap
@@ -872,19 +848,7 @@ class BatteryModule : Module {
             Prefs.setBool(ctx, "bat_low_fired", false)
         }
 
-        val tempEnabled = Prefs.getBool(ctx, "bat_temp_alert", true)
-        val tempThresh = Prefs.getInt(ctx, "bat_temp_thresh", 42)
-        val tempFired = Prefs.getBool(ctx, "bat_temp_fired", false)
-        val currentTemp = temp / 10f
 
-        if (tempEnabled && currentTemp >= tempThresh.toFloat() && !tempFired) {
-            fireAlert(ctx, 2002, ctx.getString(R.string.battery_module_high_temp_alert_title), ctx.getString(R.string.battery_module_high_temp_alert_content, Fmt.temp(currentTemp)))
-            vibrate(ctx, longArrayOf(0, 500, 200, 500))
-            Prefs.setBool(ctx, "bat_temp_fired", true)
-        }
-        if (tempFired && currentTemp < tempThresh - 3) {
-            Prefs.setBool(ctx, "bat_temp_fired", false)
-        }
 
         val limitMin = Prefs.getInt(ctx, "scr_time_limit", 0)
         if (limitMin > 0) {

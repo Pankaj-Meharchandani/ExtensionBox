@@ -16,7 +16,8 @@ data class ModuleDef(
 object ModuleRegistry {
 
     private val ALL_MODULES = listOf(
-        ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "Battery & Screen", "Battery health, power and screen usage", true),
+        ModuleDef("battery", Icons.Rounded.BatteryChargingFull, "Battery & Power", "Battery health, power draw and charging stats", true),
+        ModuleDef("thermal", Icons.Rounded.Thermostat, "Thermals", "Device & battery temperatures and thermal zones", true),
         ModuleDef("screen_time", Icons.Rounded.Schedule, "Screen Time", "App usage, open counts & unlock analytics", true),
         ModuleDef("app_usage", Icons.Rounded.Apps, "App Usage", "Time spent in each application", false),
         ModuleDef("cpu", Icons.Rounded.Memory, "CPU", "CPU usage, frequency and temperature", true),
@@ -56,6 +57,7 @@ object ModuleRegistry {
     fun getModule(key: String): com.extensionbox.app.modules.Module? {
         return when (key) {
             "battery" -> com.extensionbox.app.modules.BatteryModule()
+            "thermal" -> com.extensionbox.app.modules.ThermalModule()
             "screen_time" -> com.extensionbox.app.modules.ScreenTimeModule()
             "cpu" -> com.extensionbox.app.modules.CpuModule()
             "ram" -> com.extensionbox.app.modules.RamModule()

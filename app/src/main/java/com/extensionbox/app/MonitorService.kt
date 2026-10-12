@@ -102,6 +102,7 @@ class MonitorService : Service() {
             
             modules = listOf(
                 BatteryModule(),
+                ThermalModule(),
                 ScreenTimeModule(),
                 CpuModule(),
                 RamModule(),

@@ -87,7 +87,17 @@
         <!-- ═══ Module Widgets ═══ -->
         <receiver android:name=".widgets.ModuleWidgetProvider$BatteryWidgetProvider"
             android:exported="true"
-            android:label="Battery &amp; Screen">
+            android:label="Battery &amp; Power">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/widget_battery_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.ModuleWidgetProvider$ThermalWidgetProvider"
+            android:exported="true"
+            android:label="Thermals">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

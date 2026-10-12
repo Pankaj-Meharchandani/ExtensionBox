@@ -20,6 +20,7 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
 
     // Subclass aliases
     class BatteryWidgetProvider : ModuleWidgetProvider()
+    class ThermalWidgetProvider : ModuleWidgetProvider()
     class CpuWidgetProvider : ModuleWidgetProvider()
     class RamWidgetProvider : ModuleWidgetProvider()
     class ScreenWidgetProvider : ModuleWidgetProvider()
@@ -46,6 +47,7 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
             val name = cls.simpleName
             return when (name) {
                 "BatteryWidgetProvider" -> "battery"
+                "ThermalWidgetProvider" -> "thermal"
                 "CpuWidgetProvider" -> "cpu"
                 "RamWidgetProvider" -> "ram"
                 "ScreenWidgetProvider" -> "battery" // Screen merged into battery
@@ -133,6 +135,7 @@ open class ModuleWidgetProvider : AppWidgetProvider() {
 
             val providers = arrayOf(
                 BatteryWidgetProvider::class.java,
+                ThermalWidgetProvider::class.java,
                 CpuWidgetProvider::class.java,
                 RamWidgetProvider::class.java,
                 ScreenWidgetProvider::class.java,
