@@ -23,8 +23,13 @@ import com.extensionbox.app.Fmt
 import com.extensionbox.app.Prefs
 import com.extensionbox.app.R
 import com.extensionbox.app.SystemAccess
+import com.extensionbox.app.db.AppDatabase
 import com.extensionbox.app.ui.components.SettingSlider
 import com.extensionbox.app.ui.components.SettingSwitch
+import com.extensionbox.app.ui.components.Sparkline
+import com.extensionbox.app.ui.components.extractPoints
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.LinkedHashMap
 import java.util.Locale
 
@@ -154,6 +159,19 @@ class ThermalModule : Module {
             thermalZones.values.maxOrNull() ?: 0f
         )
 
+        var historyPoints by remember { mutableStateOf<List<Float>>(emptyList()) }
+
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val db = AppDatabase.getDatabase(ctx)
+                    val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000)
+                    val history = db.moduleDataDao().getHistoryList("thermal", oneHourAgo)
+                    historyPoints = extractPoints("thermal", history)
+                } catch (_: Exception) {}
+            }
+        }
+
         val statusColor = when {
             maxTemp >= 48f -> Color(0xFFFF1744)
             maxTemp >= 42f -> Color(0xFFFF9100)
@@ -269,7 +287,57 @@ class ThermalModule : Module {
                 }
             }
 
-            // --- 2. Hardware Thermal Zones List ---
+            // --- 2. Thermal History Trend Chart Card ---
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Thermal History Trend",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Recorded temperature history over recent monitoring periods",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (historyPoints.size >= 2) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(100.dp)
+                        ) {
+                            Sparkline(
+                                points = historyPoints,
+                                modifier = Modifier.fillMaxSize(),
+                                color = statusColor,
+                                strokeWidth = 2.dp,
+                                fillGradient = true,
+                                animate = true
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Recording thermal samples...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- 3. Hardware Thermal Zones List ---
             if (thermalZones.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(22.dp),

@@ -81,7 +81,7 @@ fun SettingSwitch(
 
 // Keys extractPoints can chart. Keep in sync with the `when` below.
 private val CHART_KEYS = setOf(
-    "battery", "cpu", "ram", "sleep", "network", "data", "unlock", "storage",
+    "battery", "thermal", "cpu", "ram", "sleep", "network", "data", "unlock", "storage",
     "connection", "screen", "screen_time", "uptime", "steps", "speedtest"
 )
 
@@ -91,6 +91,10 @@ fun extractPoints(key: String, history: List<ModuleDataEntity>): List<Float> {
     return history.mapNotNull { entity ->
         when (key) {
             "battery"     -> entity.data["battery.level"]?.removeSuffix("%")?.toFloatOrNull()
+            "thermal"     -> entity.data["thermal.battery_temp"]?.removeSuffix("°C")?.removeSuffix("°F")?.toFloatOrNull()
+                ?: entity.data["thermal.max_temp"]?.removeSuffix("°C")?.removeSuffix("°F")?.toFloatOrNull()
+                ?: entity.data["thermal.cpu_temp"]?.removeSuffix("°C")?.removeSuffix("°F")?.toFloatOrNull()
+                ?: entity.data["battery.temp"]?.removeSuffix("°C")?.removeSuffix("°F")?.toFloatOrNull()
             "cpu"         -> entity.data["cpu.usage"]?.removeSuffix("%")?.toFloatOrNull()
             "ram"         -> entity.data["ram.percentage"]?.removeSuffix("%")?.toFloatOrNull()
             "sleep"       -> entity.data["sleep.deep_percentage"]?.removeSuffix("%")?.toFloatOrNull()
