@@ -25,6 +25,7 @@ data class ToolDef(
 
 private val TOOLS = listOf(
     ToolDef("speedtest", "Speed Test", "Test network download, upload & ping latency", Icons.Default.Speed),
+    ToolDef("sensor_test", "Sensor Test", "Real-time hardware sensor testing & specs inspection", Icons.Default.Sensors),
     ToolDef("app_usage", "App Usage", "Screen time, launches, session avg & battery impact", Icons.Default.Apps),
     ToolDef("privacy", "Privacy Dashboard", "Permission usage monitoring and force-revoke tools", Icons.Default.Shield),
     ToolDef("debloat", "Debloat Apps", "Scan and remove bloatware or unwanted system packages", Icons.Default.Delete)

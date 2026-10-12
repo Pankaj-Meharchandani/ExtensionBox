@@ -219,6 +219,7 @@ fun MainApp() {
                     "debloat" -> navController.navigate("debloat")
                     "privacy" -> navController.navigate("privacy")
                     "speedtest" -> navController.navigate("speedtest")
+                    "sensor_test" -> navController.navigate("sensor_test")
                     else -> navController.navigate("module/$key")
                 }
             }) }
@@ -240,6 +241,9 @@ fun MainApp() {
                 if (sys != null) {
                     SpeedTestScreen(sys = sys)
                 }
+            }
+            composable("sensor_test") {
+                SensorTestScreen()
             }
         }
     }
