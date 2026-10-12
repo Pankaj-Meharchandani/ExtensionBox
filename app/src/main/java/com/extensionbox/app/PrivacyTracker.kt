@@ -1,15 +1,24 @@
 package com.extensionbox.app
 
+import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
+import android.location.GnssStatus
+import android.location.LocationManager
 import android.media.AudioManager
 import android.media.AudioRecordingConfiguration
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
+import androidx.core.content.ContextCompat
 import com.extensionbox.app.ui.screens.PrivacyEvent
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,6 +31,7 @@ object PrivacyTracker {
     private var isRegistered = false
     private val memoryEvents = ConcurrentHashMap.newKeySet<PrivacyEvent>()
 
+    @SuppressLint("MissingPermission")
     fun init(context: Context) {
         val appCtx = context.applicationContext
         loadPersistedEvents(appCtx)
@@ -31,7 +41,7 @@ object PrivacyTracker {
 
         val mainHandler = Handler(Looper.getMainLooper())
 
-        // 1. Camera Hardware Listener (Works 100% natively on stock Android without Root/Shizuku)
+        // 1. Camera Hardware Listener
         try {
             val cameraManager = appCtx.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
             cameraManager?.registerAvailabilityCallback(
@@ -39,8 +49,9 @@ object PrivacyTracker {
                     override fun onCameraUnavailable(cameraId: String) {
                         super.onCameraUnavailable(cameraId)
                         val fgPkg = getForegroundPackage(appCtx)
-                        if (fgPkg.isNotBlank() && fgPkg != appCtx.packageName) {
-                            recordOpEvent(appCtx, fgPkg, "CAMERA")
+                        val targetPkg = if (fgPkg.isNotBlank()) fgPkg else getDefaultCameraPackage(appCtx)
+                        if (targetPkg.isNotBlank() && targetPkg != appCtx.packageName) {
+                            recordOpEvent(appCtx, targetPkg, "CAMERA")
                         }
                     }
                 },
@@ -71,7 +82,47 @@ object PrivacyTracker {
             e.printStackTrace()
         }
 
-        // 3. AppOps Mode Watcher
+        // 3. Location GPS/GNSS Hardware Listener (Natively captures Location access)
+        try {
+            val locationManager = appCtx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            if (locationManager != null) {
+                val gnssCallback = object : GnssStatus.Callback() {
+                    override fun onStarted() {
+                        super.onStarted()
+                        val fgPkg = getForegroundPackage(appCtx)
+                        if (fgPkg.isNotBlank() && fgPkg != appCtx.packageName) {
+                            recordOpEvent(appCtx, fgPkg, "FINE_LOCATION")
+                        }
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    locationManager.registerGnssStatusCallback(ContextCompat.getMainExecutor(appCtx), gnssCallback)
+                } else {
+                    @Suppress("DEPRECATION")
+                    locationManager.registerGnssStatusCallback(gnssCallback, mainHandler)
+                }
+            }
+        } catch (_: SecurityException) {
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 4. Clipboard Listener (Ensured on Main Looper)
+        mainHandler.post {
+            try {
+                val clipboard = appCtx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                clipboard?.addPrimaryClipChangedListener {
+                    val fgPkg = getForegroundPackage(appCtx)
+                    if (fgPkg.isNotBlank() && fgPkg != appCtx.packageName) {
+                        recordOpEvent(appCtx, fgPkg, "READ_CLIPBOARD")
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 5. AppOps Mode Watcher for Location, Camera, Mic & Clipboard
         try {
             val appOps = appCtx.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
             if (appOps != null) {
@@ -79,7 +130,10 @@ object PrivacyTracker {
                     AppOpsManager.OPSTR_CAMERA,
                     AppOpsManager.OPSTR_RECORD_AUDIO,
                     AppOpsManager.OPSTR_FINE_LOCATION,
-                    AppOpsManager.OPSTR_COARSE_LOCATION
+                    AppOpsManager.OPSTR_COARSE_LOCATION,
+                    AppOpsManager.OPSTR_MONITOR_LOCATION,
+                    AppOpsManager.OPSTR_MONITOR_HIGH_POWER_LOCATION,
+                    "android:read_clipboard"
                 )
                 for (op in watchOps) {
                     try {
@@ -89,7 +143,8 @@ object PrivacyTracker {
                                 val opName = when {
                                     changedOp.contains("camera", ignoreCase = true) -> "CAMERA"
                                     changedOp.contains("audio", ignoreCase = true) || changedOp.contains("record", ignoreCase = true) -> "RECORD_AUDIO"
-                                    changedOp.contains("location", ignoreCase = true) -> "FINE_LOCATION"
+                                    changedOp.contains("location", ignoreCase = true) || changedOp.contains("gps", ignoreCase = true) || changedOp.contains("fine", ignoreCase = true) -> "FINE_LOCATION"
+                                    changedOp.contains("clipboard", ignoreCase = true) -> "READ_CLIPBOARD"
                                     else -> "PRIVACY_ACCESS"
                                 }
                                 recordOpEvent(appCtx, fgPkg, opName)
@@ -102,7 +157,7 @@ object PrivacyTracker {
             e.printStackTrace()
         }
 
-        // 4. AppOps Active Watcher (API 30+)
+        // 6. AppOps Active Watcher (API 30+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val appOps = appCtx.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
@@ -111,7 +166,9 @@ object PrivacyTracker {
                         AppOpsManager.OPSTR_CAMERA,
                         AppOpsManager.OPSTR_RECORD_AUDIO,
                         AppOpsManager.OPSTR_FINE_LOCATION,
-                        AppOpsManager.OPSTR_COARSE_LOCATION
+                        AppOpsManager.OPSTR_COARSE_LOCATION,
+                        AppOpsManager.OPSTR_MONITOR_LOCATION,
+                        AppOpsManager.OPSTR_MONITOR_HIGH_POWER_LOCATION
                     ),
                     appCtx.mainExecutor
                 ) { op, uid, pkgName, active ->
@@ -124,7 +181,7 @@ object PrivacyTracker {
                             val opName = when {
                                 op.contains("camera", ignoreCase = true) -> "CAMERA"
                                 op.contains("audio", ignoreCase = true) || op.contains("record", ignoreCase = true) -> "RECORD_AUDIO"
-                                op.contains("location", ignoreCase = true) -> "FINE_LOCATION"
+                                op.contains("location", ignoreCase = true) || op.contains("fine", ignoreCase = true) -> "FINE_LOCATION"
                                 else -> "PRIVACY_ACCESS"
                             }
                             recordOpEvent(appCtx, fgPkg, opName)
@@ -135,6 +192,37 @@ object PrivacyTracker {
                 e.printStackTrace()
             }
         }
+    }
+
+    fun getDefaultCameraPackage(context: Context): String {
+        try {
+            val pm = context.packageManager
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            val resolveInfo = pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                ?: pm.resolveActivity(intent, 0)
+            if (resolveInfo != null && resolveInfo.activityInfo != null) {
+                val pkg = resolveInfo.activityInfo.packageName
+                if (!pkg.isNullOrBlank() && pkg != context.packageName) return pkg
+            }
+        } catch (_: Exception) {}
+
+        val commonCameraPkgs = listOf(
+            "com.google.android.GoogleCamera",
+            "com.sec.android.app.camera",
+            "com.android.camera",
+            "com.android.camera2",
+            "com.oneplus.camera",
+            "com.miui.camera",
+            "com.oppo.camera",
+            "com.vivo.camera"
+        )
+        for (pkg in commonCameraPkgs) {
+            try {
+                context.packageManager.getPackageInfo(pkg, 0)
+                return pkg
+            } catch (_: Exception) {}
+        }
+        return ""
     }
 
     private fun recordOpEvent(context: Context, packageName: String, opName: String) {
@@ -192,7 +280,7 @@ object PrivacyTracker {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
             if (usm != null) {
                 val now = System.currentTimeMillis()
-                val events = usm.queryEvents(now - 10000L, now)
+                val events = usm.queryEvents(now - 15000L, now)
                 val event = UsageEvents.Event()
                 var lastResumedPkg = ""
                 var maxTime = 0L
@@ -211,21 +299,23 @@ object PrivacyTracker {
                 if (lastResumedPkg.isNotBlank()) return lastResumedPkg
 
                 val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 60000L, now)
-                val recent = stats?.maxByOrNull { it.lastTimeUsed }
-                if (recent != null && recent.packageName != context.packageName) {
+                val recent = stats?.filter { it.packageName != context.packageName }?.maxByOrNull { it.lastTimeUsed }
+                if (recent != null) {
                     return recent.packageName
                 }
             }
         } catch (_: Exception) {}
 
         try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             val processes = am?.runningAppProcesses
             val fgProc = processes?.find {
-                it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND &&
-                it.processName != context.packageName
+                it.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE &&
+                it.processName != context.packageName &&
+                !it.processName.contains("systemui", ignoreCase = true) &&
+                !it.processName.contains("launcher", ignoreCase = true)
             }
-            if (fgProc != null) return fgProc.processName
+            if (fgProc != null && fgProc.processName.contains(".")) return fgProc.processName
         } catch (_: Exception) {}
 
         return ""
