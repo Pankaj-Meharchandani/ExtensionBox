@@ -121,10 +121,16 @@ fun PrivacyScreen(
             )
         }
 
-        // Item 2: Banner if not Root/Shizuku
+        // Item 2: Banners if not Root/Shizuku or Usage Access missing
         if (!sys.isEnhanced()) {
             item(key = "shizuku_banner") {
                 PrivilegeWarningBanner(context = context)
+            }
+        }
+
+        if (!com.extensionbox.app.PrivacyTracker.hasUsageAccess(context)) {
+            item(key = "usage_access_banner") {
+                UsageAccessWarningBanner(context = context)
             }
         }
 
@@ -387,6 +393,69 @@ private fun PrivilegeWarningBanner(context: Context) {
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Grant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// --- Usage Access Banner ---
+@Composable
+private fun UsageAccessWarningBanner(context: Context) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.8f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column {
+                    Text(
+                        text = "Grant Usage Access Permission",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "Enables real-time tracking of camera & mic access without Root/Shizuku.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Button(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+            ) {
+                Text("Enable", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }

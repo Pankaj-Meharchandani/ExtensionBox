@@ -98,6 +98,7 @@ class MonitorService : Service() {
         serviceScope.launch(Dispatchers.IO) {
             database = AppDatabase.getDatabase(this@MonitorService)
             sysAccess = SystemAccess(this@MonitorService)
+            PrivacyTracker.init(this@MonitorService)
             
             modules = listOf(
                 BatteryModule(),

@@ -695,41 +695,49 @@ class SystemAccess(ctx: Context) {
     // --- Privacy & Permission Management ---
 
     fun getPrivacyHistory(ctx: android.content.Context): List<com.extensionbox.app.ui.screens.PrivacyEvent> {
+        // 1. Initialize real-time sensor & privacy tracker (Works 100% on stock devices without Root/Shizuku)
+        PrivacyTracker.init(ctx)
+        val trackedEvents = PrivacyTracker.getEvents(ctx)
+
+        // 2. Fetch dumpsys appops logs if Root or Shizuku is available
         val cmd = "dumpsys appops"
         val out = if (rootAvailable) shell.exec(cmd) else readFileShizukuShell(cmd)
-        if (out == null) return emptyList()
-
-        val events = mutableListOf<com.extensionbox.app.ui.screens.PrivacyEvent>()
-        val pm = ctx.packageManager
         
-        // Target high-sensitivity ops
-        val targetOps = setOf("CAMERA", "RECORD_AUDIO", "FINE_LOCATION", "COARSE_LOCATION", "READ_CLIPBOARD")
-        
-        var currentPackage = ""
-        out.lines().forEach { line ->
-            val l = line.trim()
-            if (l.startsWith("Package ")) {
-                currentPackage = l.substringAfter("Package ").substringBefore(":")
-            } else if (currentPackage.isNotEmpty()) {
-                for (op in targetOps) {
-                    if (l.contains("$op: ")) {
-                        // Example line: CAMERA: allow; time=+1m32s321ms ago; duration=1s234ms
-                        val timeStr = Regex("""time=([^;]+)""").find(l)?.groupValues?.get(1)
-                        if (timeStr != null) {
-                            val lastAccess = parseRelativeTime(timeStr)
-                            val label = try { pm.getApplicationLabel(pm.getApplicationInfo(currentPackage, 0)).toString() } catch (_: Exception) { currentPackage }
-                            events.add(com.extensionbox.app.ui.screens.PrivacyEvent(
-                                packageName = currentPackage,
-                                appLabel = label,
-                                opName = op,
-                                lastAccessTime = lastAccess
-                            ))
+        val systemEvents = mutableListOf<com.extensionbox.app.ui.screens.PrivacyEvent>()
+        if (out != null) {
+            val pm = ctx.packageManager
+            val targetOps = setOf("CAMERA", "RECORD_AUDIO", "FINE_LOCATION", "COARSE_LOCATION", "READ_CLIPBOARD")
+            
+            var currentPackage = ""
+            out.lines().forEach { line ->
+                val l = line.trim()
+                if (l.startsWith("Package ")) {
+                    currentPackage = l.substringAfter("Package ").substringBefore(":")
+                } else if (currentPackage.isNotEmpty()) {
+                    for (op in targetOps) {
+                        if (l.contains("$op: ")) {
+                            val timeStr = Regex("""time=([^;]+)""").find(l)?.groupValues?.get(1)
+                            if (timeStr != null) {
+                                val lastAccess = parseRelativeTime(timeStr)
+                                val label = try { pm.getApplicationLabel(pm.getApplicationInfo(currentPackage, 0)).toString() } catch (_: Exception) { currentPackage }
+                                systemEvents.add(com.extensionbox.app.ui.screens.PrivacyEvent(
+                                    packageName = currentPackage,
+                                    appLabel = label,
+                                    opName = op,
+                                    lastAccessTime = lastAccess
+                                ))
+                            }
                         }
                     }
                 }
             }
         }
-        return events.sortedByDescending { it.lastAccessTime }.take(20)
+
+        // 3. Combine both sources, deduplicate & sort by lastAccessTime descending
+        return (trackedEvents + systemEvents)
+            .distinctBy { "${it.packageName}_${it.opName}_${it.lastAccessTime / 3000L}" }
+            .sortedByDescending { it.lastAccessTime }
+            .take(50)
     }
 
     fun getAppPermissions(ctx: Context?, packageName: String): List<com.extensionbox.app.ui.screens.PermissionInfo> {
