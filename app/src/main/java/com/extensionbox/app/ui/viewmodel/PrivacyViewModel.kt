@@ -34,6 +34,9 @@ class PrivacyViewModel : ViewModel() {
     private val _selectedAppPermissions = MutableStateFlow<List<PermissionInfo>>(emptyList())
     val selectedAppPermissions: StateFlow<List<PermissionInfo>> = _selectedAppPermissions.asStateFlow()
 
+    private val _isLoadingPermissions = MutableStateFlow(false)
+    val isLoadingPermissions: StateFlow<Boolean> = _isLoadingPermissions.asStateFlow()
+
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
@@ -86,7 +89,6 @@ class PrivacyViewModel : ViewModel() {
                         val appInfo = pkg.applicationInfo!!
                         val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                         
-                        // Categorize risk based on requested permissions / package attributes
                         val category = when {
                             isSystem -> AppCategory.SAFE
                             pkg.packageName.contains("google") || pkg.packageName.contains("android") -> AppCategory.SAFE
@@ -110,29 +112,32 @@ class PrivacyViewModel : ViewModel() {
         }
     }
 
-    fun selectApp(sys: SystemAccess, packageName: String?) {
+    fun selectApp(ctx: Context, sys: SystemAccess, packageName: String?) {
         _selectedAppPackage.value = packageName
         if (packageName != null) {
-            loadAppPermissions(sys, packageName)
+            loadAppPermissions(ctx, sys, packageName)
         } else {
             _selectedAppPermissions.value = emptyList()
+            _isLoadingPermissions.value = false
         }
     }
 
-    fun loadAppPermissions(sys: SystemAccess, packageName: String) {
+    fun loadAppPermissions(ctx: Context, sys: SystemAccess, packageName: String) {
         viewModelScope.launch {
+            _isLoadingPermissions.value = true
             withContext(Dispatchers.IO) {
-                _selectedAppPermissions.value = sys.getAppPermissions(packageName)
+                _selectedAppPermissions.value = sys.getAppPermissions(ctx, packageName)
             }
+            _isLoadingPermissions.value = false
         }
     }
 
-    fun updatePermission(sys: SystemAccess, packageName: String, opName: String, mode: String) {
+    fun updatePermission(ctx: Context, sys: SystemAccess, packageName: String, opName: String, mode: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val success = sys.setAppPermission(packageName, opName, mode)
                 if (success) {
-                    _selectedAppPermissions.value = sys.getAppPermissions(packageName)
+                    _selectedAppPermissions.value = sys.getAppPermissions(ctx, packageName)
                     _toastMessage.value = "Updated $opName to $mode for ${packageName.substringAfterLast('.')}"
                 } else {
                     _toastMessage.value = "Permission change requires Shizuku or Root access"

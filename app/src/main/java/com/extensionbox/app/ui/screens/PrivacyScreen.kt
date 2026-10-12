@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,7 +42,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PrivacyScreen(
     sys: SystemAccess,
@@ -59,6 +60,7 @@ fun PrivacyScreen(
     val matrixCategory by viewModel.matrixCategory.collectAsState()
     val selectedAppPackage by viewModel.selectedAppPackage.collectAsState()
     val selectedAppPermissions by viewModel.selectedAppPermissions.collectAsState()
+    val isLoadingPermissions by viewModel.isLoadingPermissions.collectAsState()
 
     // Handle toast messages
     LaunchedEffect(toastMessage) {
@@ -73,142 +75,318 @@ fun PrivacyScreen(
         viewModel.loadData(context, sys)
     }
 
-    Column(
+    // Filtered events
+    val filteredEvents = remember(events, searchQuery) {
+        if (searchQuery.isBlank()) events
+        else events.filter {
+            it.appLabel.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true) ||
+            it.opName.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    // Filtered apps
+    val filteredApps = remember(apps, searchQuery, appFilter) {
+        apps.filter { app ->
+            val matchesQuery = searchQuery.isBlank() ||
+                app.label.contains(searchQuery, ignoreCase = true) ||
+                app.packageName.contains(searchQuery, ignoreCase = true)
+
+            val matchesFilter = when (appFilter) {
+                AppTypeFilter.ALL -> true
+                AppTypeFilter.USER -> !app.isSystem
+                AppTypeFilter.SYSTEM -> app.isSystem
+                AppTypeFilter.HIGH_RISK -> app.category != AppCategory.SAFE
+            }
+            matchesQuery && matchesFilter
+        }
+    }
+
+    val userApps = remember(apps) { apps.filter { !it.isSystem }.take(40) }
+    val sdf = remember { SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()) }
+
+    // Unified Full-Screen Scrollable LazyColumn
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // --- Privacy Hero Summary Dashboard ---
-        PrivacyHeroHeader(
-            events = events,
-            sys = sys,
-            isRefreshing = isRefreshing,
-            onRefresh = { viewModel.loadData(context, sys) }
-        )
+        // Item 1: Hero Header
+        item(key = "privacy_hero") {
+            PrivacyHeroHeader(
+                events = events,
+                sys = sys,
+                isRefreshing = isRefreshing,
+                onRefresh = { viewModel.loadData(context, sys) }
+            )
+        }
 
-        // --- Permission Banner if NOT Rooted or Shizuku Active ---
+        // Item 2: Banner if not Root/Shizuku
         if (!sys.isEnhanced()) {
+            item(key = "shizuku_banner") {
+                PrivilegeWarningBanner(context = context)
+            }
+        }
+
+        // Item 3: Sticky Tab Row
+        stickyHeader(key = "tab_row") {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                shadowElevation = 3.dp
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                TabRow(
+                    selectedTabIndex = activeTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
+                    Tab(
+                        selected = activeTab == 0,
+                        onClick = { viewModel.setActiveTab(0) },
+                        text = { Text("Timeline", fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    Tab(
+                        selected = activeTab == 1,
+                        onClick = { viewModel.setActiveTab(1) },
+                        text = { Text("Apps", fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    Tab(
+                        selected = activeTab == 2,
+                        onClick = { viewModel.setActiveTab(2) },
+                        text = { Text("Matrix", fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                }
+            }
+        }
+
+        // Dynamic Tab Content Items
+        when (activeTab) {
+            0 -> { // --- TIMELINE TAB ---
+                item(key = "timeline_search") {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Search logs...") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
+                                }
+                            } else null,
+                            shape = RoundedCornerShape(16.dp),
+                            singleLine = true
                         )
-                        Column {
-                            Text(
-                                text = "Shizuku or Root Access Required",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "Reading access logs & revoking permissions require elevated privileges.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
-                                fontSize = 11.sp
-                            )
+                    }
+                }
+
+                if (filteredEvents.isEmpty()) {
+                    item(key = "timeline_empty") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Shield,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(56.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = if (events.isEmpty()) "No recent privacy access logs found" else "No matching logs",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                                if (intent != null) context.startActivity(intent)
-                                else {
-                                    rikka.shizuku.Shizuku.requestPermission(1001)
+                } else {
+                    items(filteredEvents, key = { "${it.packageName}_${it.opName}_${it.lastAccessTime}" }) { event ->
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            TimelineCard(event = event, sdf = sdf)
+                        }
+                    }
+                }
+            }
+            1 -> { // --- APPS TAB ---
+                item(key = "apps_search_filter") {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Search installed apps...") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
                                 }
-                            } catch (_: Exception) {
-                                try { rikka.shizuku.Shizuku.requestPermission(1001) } catch (_: Exception) {}
+                            } else null,
+                            shape = RoundedCornerShape(16.dp),
+                            singleLine = true
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(AppTypeFilter.entries.toTypedArray()) { filter ->
+                                val label = when (filter) {
+                                    AppTypeFilter.ALL -> "All (${apps.size})"
+                                    AppTypeFilter.USER -> "User Apps"
+                                    AppTypeFilter.SYSTEM -> "System Apps"
+                                    AppTypeFilter.HIGH_RISK -> "High Risk"
+                                }
+                                FilterChip(
+                                    selected = appFilter == filter,
+                                    onClick = { viewModel.setAppFilter(filter) },
+                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                )
                             }
-                        },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Grant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                items(filteredApps, key = { it.packageName }) { app ->
+                    val isExpanded = selectedAppPackage == app.packageName
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        AppInspectorCard(
+                            app = app,
+                            isExpanded = isExpanded,
+                            isLoadingPermissions = isLoadingPermissions,
+                            onClick = {
+                                viewModel.selectApp(context, sys, if (isExpanded) null else app.packageName)
+                            },
+                            permissions = if (isExpanded) selectedAppPermissions else emptyList(),
+                            onUpdate = { op, mode ->
+                                viewModel.updatePermission(context, sys, app.packageName, op, mode)
+                            }
+                        )
+                    }
+                }
+            }
+            2 -> { // --- MATRIX TAB ---
+                item(key = "matrix_selector") {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        val categories = listOf(
+                            "CAMERA" to "Camera",
+                            "RECORD_AUDIO" to "Microphone",
+                            "FINE_LOCATION" to "Location",
+                            "READ_CLIPBOARD" to "Clipboard",
+                            "SYSTEM_ALERT_WINDOW" to "System Overlay"
+                        )
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(categories) { (catKey, catLabel) ->
+                                FilterChip(
+                                    selected = matrixCategory == catKey,
+                                    onClick = { viewModel.setMatrixCategory(catKey) },
+                                    label = { Text(catLabel, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                items(userApps, key = { it.packageName }) { app ->
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        MatrixAppCard(
+                            app = app,
+                            opName = matrixCategory,
+                            sys = sys,
+                            context = context,
+                            onUpdate = { mode ->
+                                viewModel.updatePermission(context, sys, app.packageName, matrixCategory, mode)
+                            }
+                        )
                     }
                 }
             }
         }
 
-        // --- Navigation Tab Bar ---
-        TabRow(
-            selectedTabIndex = activeTab,
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-            contentColor = MaterialTheme.colorScheme.primary,
-            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
-        ) {
-            Tab(
-                selected = activeTab == 0,
-                onClick = { viewModel.setActiveTab(0) },
-                text = { Text("Timeline", fontWeight = FontWeight.Bold) },
-                icon = { Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
-            Tab(
-                selected = activeTab == 1,
-                onClick = { viewModel.setActiveTab(1) },
-                text = { Text("Apps", fontWeight = FontWeight.Bold) },
-                icon = { Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
-            Tab(
-                selected = activeTab == 2,
-                onClick = { viewModel.setActiveTab(2) },
-                text = { Text("Matrix", fontWeight = FontWeight.Bold) },
-                icon = { Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
+        item(key = "bottom_spacer") {
+            Spacer(Modifier.height(80.dp))
         }
+    }
+}
 
-        // --- Content Views ---
-        Box(modifier = Modifier.weight(1f)) {
-            when (activeTab) {
-                0 -> PrivacyTimelineView(
-                    events = events,
-                    searchQuery = searchQuery,
-                    onSearchChange = { viewModel.setSearchQuery(it) }
+// --- Privilege Warning Banner ---
+@Composable
+private fun PrivilegeWarningBanner(context: Context) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(20.dp)
                 )
-                1 -> AppInspectorView(
-                    apps = apps,
-                    searchQuery = searchQuery,
-                    onSearchChange = { viewModel.setSearchQuery(it) },
-                    appFilter = appFilter,
-                    onFilterChange = { viewModel.setAppFilter(it) },
-                    selectedAppPackage = selectedAppPackage,
-                    selectedPermissions = selectedAppPermissions,
-                    onAppSelect = { pkg -> viewModel.selectApp(sys, pkg) },
-                    onPermissionUpdate = { op, mode ->
-                        selectedAppPackage?.let { pkg -> viewModel.updatePermission(sys, pkg, op, mode) }
+                Column {
+                    Text(
+                        text = "Shizuku or Root Access Required",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "Access logs & AppOps revoking require Shizuku/Root privileges.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Button(
+                onClick = {
+                    try {
+                        val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                        if (intent != null) context.startActivity(intent)
+                        else {
+                            rikka.shizuku.Shizuku.requestPermission(1001)
+                        }
+                    } catch (_: Exception) {
+                        try { rikka.shizuku.Shizuku.requestPermission(1001) } catch (_: Exception) {}
                     }
-                )
-                2 -> PermissionMatrixView(
-                    apps = apps,
-                    selectedCategory = matrixCategory,
-                    onCategorySelect = { viewModel.setMatrixCategory(it) },
-                    sys = sys,
-                    onPermissionUpdate = { pkg, op, mode ->
-                        viewModel.updatePermission(sys, pkg, op, mode)
-                    }
-                )
+                },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Grant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -366,78 +544,6 @@ private fun MetricChip(
     }
 }
 
-// --- 1. Privacy Timeline View ---
-@Composable
-private fun PrivacyTimelineView(
-    events: List<PrivacyEvent>,
-    searchQuery: String,
-    onSearchChange: (String) -> Unit
-) {
-    val filteredEvents = remember(events, searchQuery) {
-        if (searchQuery.isBlank()) events
-        else events.filter {
-            it.appLabel.contains(searchQuery, ignoreCase = true) ||
-            it.packageName.contains(searchQuery, ignoreCase = true) ||
-            it.opName.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search logs...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = if (searchQuery.isNotEmpty()) {
-                {
-                    IconButton(onClick = { onSearchChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
-                    }
-                }
-            } else null,
-            shape = RoundedCornerShape(16.dp),
-            singleLine = true
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        if (filteredEvents.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Outlined.Shield,
-                        contentDescription = null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = if (events.isEmpty()) "No recent privacy access logs found" else "No matching logs",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            val sdf = remember { SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()) }
-
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                items(filteredEvents, key = { "${it.packageName}_${it.opName}_${it.lastAccessTime}" }) { event ->
-                    TimelineCard(event = event, sdf = sdf)
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun TimelineCard(
     event: PrivacyEvent,
@@ -497,101 +603,11 @@ private fun TimelineCard(
     }
 }
 
-// --- 2. App Inspector View ---
-@Composable
-private fun AppInspectorView(
-    apps: List<AppInfo>,
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    appFilter: AppTypeFilter,
-    onFilterChange: (AppTypeFilter) -> Unit,
-    selectedAppPackage: String?,
-    selectedPermissions: List<PermissionInfo>,
-    onAppSelect: (String?) -> Unit,
-    onPermissionUpdate: (String, String) -> Unit
-) {
-    val filteredApps = remember(apps, searchQuery, appFilter) {
-        apps.filter { app ->
-            val matchesQuery = searchQuery.isBlank() ||
-                app.label.contains(searchQuery, ignoreCase = true) ||
-                app.packageName.contains(searchQuery, ignoreCase = true)
-
-            val matchesFilter = when (appFilter) {
-                AppTypeFilter.ALL -> true
-                AppTypeFilter.USER -> !app.isSystem
-                AppTypeFilter.SYSTEM -> app.isSystem
-                AppTypeFilter.HIGH_RISK -> app.category != AppCategory.SAFE
-            }
-            matchesQuery && matchesFilter
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search installed apps...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = if (searchQuery.isNotEmpty()) {
-                {
-                    IconButton(onClick = { onSearchChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
-                    }
-                }
-            } else null,
-            shape = RoundedCornerShape(16.dp),
-            singleLine = true
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        // Filter Chips
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(AppTypeFilter.entries.toTypedArray()) { filter ->
-                val label = when (filter) {
-                    AppTypeFilter.ALL -> "All (${apps.size})"
-                    AppTypeFilter.USER -> "User Apps"
-                    AppTypeFilter.SYSTEM -> "System Apps"
-                    AppTypeFilter.HIGH_RISK -> "High Risk"
-                }
-                FilterChip(
-                    selected = appFilter == filter,
-                    onClick = { onFilterChange(filter) },
-                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(filteredApps, key = { it.packageName }) { app ->
-                val isExpanded = selectedAppPackage == app.packageName
-                AppInspectorCard(
-                    app = app,
-                    isExpanded = isExpanded,
-                    onClick = { onAppSelect(if (isExpanded) null else app.packageName) },
-                    permissions = if (isExpanded) selectedPermissions else emptyList(),
-                    onUpdate = onPermissionUpdate
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun AppInspectorCard(
     app: AppInfo,
     isExpanded: Boolean,
+    isLoadingPermissions: Boolean,
     onClick: () -> Unit,
     permissions: List<PermissionInfo>,
     onUpdate: (String, String) -> Unit
@@ -659,30 +675,30 @@ private fun AppInspectorCard(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(Modifier.height(12.dp))
 
-                    if (permissions.isEmpty()) {
-                        Box(
+                    if (isLoadingPermissions) {
+                        Row(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            contentAlignment = Alignment.Center
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        }
-                    } else {
-                        val relevantOps = setOf(
-                            "CAMERA", "RECORD_AUDIO", "FINE_LOCATION", "COARSE_LOCATION",
-                            "READ_CLIPBOARD", "SYSTEM_ALERT_WINDOW", "WRITE_SETTINGS"
-                        )
-                        val displayPerms = permissions.filter { it.opName in relevantOps }
-
-                        if (displayPerms.isEmpty()) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
                             Text(
-                                text = "No sensitive AppOps overrides found for this app",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Checking permissions...",
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        } else {
-                            displayPerms.forEach { perm ->
-                                PermissionControlRow(perm = perm, onUpdate = onUpdate)
-                            }
+                        }
+                    } else if (permissions.isEmpty()) {
+                        Text(
+                            text = "No sensitive runtime permissions requested by this app",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        permissions.forEach { perm ->
+                            PermissionControlRow(perm = perm, onUpdate = onUpdate)
                         }
                     }
                 }
@@ -722,6 +738,8 @@ private fun PermissionControlRow(
                 "FINE_LOCATION", "COARSE_LOCATION" -> Icons.Default.LocationOn
                 "READ_CLIPBOARD" -> Icons.Default.ContentPaste
                 "SYSTEM_ALERT_WINDOW" -> Icons.Default.Layers
+                "READ_CONTACTS" -> Icons.Default.Contacts
+                "WRITE_SETTINGS" -> Icons.Default.Settings
                 else -> Icons.Default.Tune
             }
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
@@ -767,73 +785,19 @@ private fun PermissionControlRow(
     }
 }
 
-// --- 3. Permission Matrix View ---
-@Composable
-private fun PermissionMatrixView(
-    apps: List<AppInfo>,
-    selectedCategory: String,
-    onCategorySelect: (String) -> Unit,
-    sys: SystemAccess,
-    onPermissionUpdate: (String, String, String) -> Unit
-) {
-    val categories = listOf(
-        "CAMERA" to "Camera",
-        "RECORD_AUDIO" to "Microphone",
-        "FINE_LOCATION" to "Location",
-        "READ_CLIPBOARD" to "Clipboard",
-        "SYSTEM_ALERT_WINDOW" to "System Overlay"
-    )
-
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(8.dp))
-
-        // Category Selector Chips
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(categories) { (catKey, catLabel) ->
-                FilterChip(
-                    selected = selectedCategory == catKey,
-                    onClick = { onCategorySelect(catKey) },
-                    label = { Text(catLabel, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // List of user apps for direct AppOps toggle
-        val userApps = remember(apps) { apps.filter { !it.isSystem }.take(40) }
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(userApps, key = { it.packageName }) { app ->
-                MatrixAppCard(
-                    app = app,
-                    opName = selectedCategory,
-                    sys = sys,
-                    onUpdate = { mode -> onPermissionUpdate(app.packageName, selectedCategory, mode) }
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun MatrixAppCard(
     app: AppInfo,
     opName: String,
     sys: SystemAccess,
+    context: Context,
     onUpdate: (String) -> Unit
 ) {
     var currentMode by remember(app.packageName, opName) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(app.packageName, opName) {
         withContext(Dispatchers.IO) {
-            val perms = sys.getAppPermissions(app.packageName)
+            val perms = sys.getAppPermissions(context, app.packageName)
             val match = perms.find { it.opName == opName }
             currentMode = match?.modeName ?: "default"
         }

@@ -732,26 +732,69 @@ class SystemAccess(ctx: Context) {
         return events.sortedByDescending { it.lastAccessTime }.take(20)
     }
 
-    fun getAppPermissions(packageName: String): List<com.extensionbox.app.ui.screens.PermissionInfo> {
+    fun getAppPermissions(ctx: Context?, packageName: String): List<com.extensionbox.app.ui.screens.PermissionInfo> {
+        val perms = mutableListOf<com.extensionbox.app.ui.screens.PermissionInfo>()
+
+        // 1. Check standard Manifest runtime permissions via PackageManager if Context is available
+        if (ctx != null) {
+            val targetPermissions = mapOf(
+                android.Manifest.permission.CAMERA to "CAMERA",
+                android.Manifest.permission.RECORD_AUDIO to "RECORD_AUDIO",
+                android.Manifest.permission.ACCESS_FINE_LOCATION to "FINE_LOCATION",
+                android.Manifest.permission.ACCESS_COARSE_LOCATION to "COARSE_LOCATION",
+                android.Manifest.permission.SYSTEM_ALERT_WINDOW to "SYSTEM_ALERT_WINDOW",
+                android.Manifest.permission.WRITE_SETTINGS to "WRITE_SETTINGS",
+                android.Manifest.permission.READ_CONTACTS to "READ_CONTACTS"
+            )
+
+            try {
+                val pm = ctx.packageManager
+                val pkgInfo = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+                }
+
+                val requested = pkgInfo.requestedPermissions
+                if (requested != null) {
+                    for (req in requested) {
+                        val opName = targetPermissions[req] ?: continue
+                        val isGranted = pm.checkPermission(req, packageName) == PackageManager.PERMISSION_GRANTED
+                        val mode = if (isGranted) 0 else 2 // 0: allow, 2: deny
+                        val modeName = if (isGranted) "allow" else "deny"
+                        if (perms.none { it.opName == opName }) {
+                            perms.add(com.extensionbox.app.ui.screens.PermissionInfo(0, opName, mode, modeName))
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. If Shizuku/Root is available, overlay with explicit AppOps settings
         val cmd = "appops get $packageName"
         val out = if (rootAvailable) shell.exec(cmd) else readFileShizukuShell(cmd)
-        if (out == null) return emptyList()
-
-        val perms = mutableListOf<com.extensionbox.app.ui.screens.PermissionInfo>()
-        out.lines().forEach { line ->
-            // Example: CAMERA: allow
-            if (line.contains(": ")) {
-                val parts = line.split(": ")
-                if (parts.size == 2) {
-                    val name = parts[0].trim()
-                    val modeStr = parts[1].trim()
-                    val mode = when (modeStr) {
-                        "allow" -> 0
-                        "ignore" -> 1
-                        "deny" -> 2
-                        else -> 3
+        if (out != null) {
+            out.lines().forEach { line ->
+                if (line.contains(": ")) {
+                    val parts = line.split(": ")
+                    if (parts.size == 2) {
+                        val name = parts[0].trim()
+                        val modeStr = parts[1].trim()
+                        val mode = when (modeStr) {
+                            "allow" -> 0
+                            "ignore" -> 1
+                            "deny" -> 2
+                            else -> 3
+                        }
+                        val existingIdx = perms.indexOfFirst { it.opName == name }
+                        val info = com.extensionbox.app.ui.screens.PermissionInfo(0, name, mode, modeStr)
+                        if (existingIdx >= 0) {
+                            perms[existingIdx] = info
+                        } else if (name in setOf("CAMERA", "RECORD_AUDIO", "FINE_LOCATION", "COARSE_LOCATION", "READ_CLIPBOARD", "SYSTEM_ALERT_WINDOW", "WRITE_SETTINGS")) {
+                            perms.add(info)
+                        }
                     }
-                    perms.add(com.extensionbox.app.ui.screens.PermissionInfo(0, name, mode, modeStr))
                 }
             }
         }
