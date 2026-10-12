@@ -1,23 +1,37 @@
 package com.extensionbox.app.modules
 
 import android.app.NotificationManager
+import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.drawable.Drawable
 import android.os.BatteryManager
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.extensionbox.app.Fmt
 import com.extensionbox.app.Prefs
 import com.extensionbox.app.R
@@ -28,9 +42,18 @@ import com.extensionbox.app.ui.components.SettingSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Calendar
 import java.util.LinkedHashMap
 import java.util.Locale
 import kotlin.math.abs
+
+data class AppBatteryUsageInfo(
+    val packageName: String,
+    val appLabel: String,
+    val foregroundTimeMs: Long,
+    val batteryPct: Float
+)
 
 class BatteryModule : Module {
 
@@ -55,7 +78,7 @@ class BatteryModule : Module {
     private var technology: String? = null
     private var cpuTemp = Float.NaN
 
-    // Screen tracking (merged from ScreenModule)
+    // Screen tracking
     private var screenOn = true
     private var onAccMs: Long = 0
     private var offAccMs: Long = 0
@@ -65,37 +88,312 @@ class BatteryModule : Module {
     private var offDrain = 0f
 
     override fun key(): String = "battery"
-    override fun name(): String = ctx?.getString(R.string.battery_module_name) ?: "Battery & Screen"
-    override fun description(): String = ctx?.getString(R.string.battery_module_description) ?: "Battery health, power and screen usage"
-        override fun defaultEnabled(): Boolean = true
-        override fun alive(): Boolean = running
-        override fun hasSettings(): Boolean = true
-    
-        @Composable
-    
+    override fun name(): String = ctx?.getString(R.string.battery_module_name) ?: "Battery & Power"
+    override fun description(): String = ctx?.getString(R.string.battery_module_description) ?: "Battery health, power draw, time left, and app battery usage"
+    override fun defaultEnabled(): Boolean = true
+    override fun alive(): Boolean = running
+    override fun hasSettings(): Boolean = true
+
+    @Composable
     override fun composableContent(ctx: Context, sys: SystemAccess) {
-        // High level overview for the detail screen
-        val ma = if (currentMa >= 0) currentMa else abs(currentMa)
         val isCharge = status == BatteryManager.BATTERY_STATUS_CHARGING
-        
-        Column {
-            Text(
-                text = if (isCharge) ctx.getString(R.string.battery_module_current_input, ma) else ctx.getString(R.string.battery_module_current_draw, ma),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isCharge) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        val absMa = abs(currentMa)
+        val watts = absMa * voltage / 1_000_000f
+        val tempC = temp / 10f
+
+        var appBatteryUsage by remember { mutableStateOf<List<AppBatteryUsageInfo>>(emptyList()) }
+
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                appBatteryUsage = getTopAppBatteryUsage(ctx)
+            }
+        }
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // --- 1. Battery Health & Live Metrics Bento Grid ---
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "$level%",
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.Black,
+                                color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = if (isCharge) "Charging (${pluggedType()})" else "Discharging • ${timeLeft()}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isCharge) Color(0xFF00E676).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = healthStr(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCharge) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // 4 Stat Items Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        BatteryStatBox(
+                            label = if (isCharge) "Charge Rate" else "Discharge Rate",
+                            value = "$absMa mA",
+                            subValue = String.format(Locale.US, "%.1f W", watts),
+                            color = if (isCharge) Color(0xFF00E676) else Color(0xFFFF5252),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        BatteryStatBox(
+                            label = "Temperature",
+                            value = Fmt.temp(tempC),
+                            subValue = if (!cpuTemp.isNaN()) "CPU ${Fmt.temp(cpuTemp)}" else "Battery",
+                            color = Color(0xFFFF9100),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        BatteryStatBox(
+                            label = "Voltage",
+                            value = String.format(Locale.US, "%.2f V", voltage / 1000f),
+                            subValue = technology ?: "Li-ion",
+                            color = Color(0xFF2979FF),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (sys.isEnhanced() && realHealthPct > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Health & Cycles",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "$realHealthPct% Health • ${if (cycleCount >= 0) "$cycleCount cycles" else "Design $designCap mAh"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- 2. App Battery Drain Breakdown ("Which app used most battery") ---
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "App Battery Usage Today",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Estimated battery drain based on active foreground screen time",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    if (appBatteryUsage.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Grant Usage Access to view per-app battery drain stats",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        val maxPct = appBatteryUsage.first().batteryPct.coerceAtLeast(0.1f)
+
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            appBatteryUsage.forEach { info ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    AppIconBox(packageName = info.packageName)
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = info.appLabel,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Text(
+                                                text = String.format(Locale.US, "%.1f%%", info.batteryPct),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+
+                                        Spacer(Modifier.height(2.dp))
+
+                                        Text(
+                                            text = "Screen: ${Fmt.duration(info.foregroundTimeMs)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        Spacer(Modifier.height(4.dp))
+
+                                        LinearProgressIndicator(
+                                            progress = { (info.batteryPct / maxPct).coerceIn(0f, 1f) },
+                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun BatteryStatBox(
+        label: String,
+        value: String,
+        subValue: String,
+        color: Color,
+        modifier: Modifier = Modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = color.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+            modifier = modifier
+        ) {
+            Column(
+                modifier = Modifier.padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                    maxLines = 1
+                )
+                Text(
+                    text = subValue,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color.copy(alpha = 0.85f),
+                    maxLines = 1
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun AppIconBox(packageName: String) {
+        val context = LocalContext.current
+        var drawable by remember(packageName) { mutableStateOf<Drawable?>(null) }
+
+        LaunchedEffect(packageName) {
+            withContext(Dispatchers.IO) {
+                try {
+                    drawable = context.packageManager.getApplicationIcon(packageName)
+                } catch (_: Exception) {}
+            }
+        }
+
+        val d = drawable
+        if (d != null) {
+            val bitmap = remember(d) { d.toBitmap(width = 80, height = 80).asImageBitmap() }
+            Image(
+                bitmap = bitmap,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp).clip(CircleShape)
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = ctx.getString(R.string.battery_module_screen_on, Fmt.duration(getTotalOn())),
-                style = MaterialTheme.typography.bodyMedium
-            )
+        } else {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Android,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 
     @Composable
     override fun settingsContent(ctx: Context, sys: SystemAccess) {
         var interval by remember { mutableStateOf(Prefs.getInt(ctx, "bat_interval", 10000).toFloat()) }
-        
+
         Column {
             SettingSlider(
                 label = ctx.getString(R.string.battery_module_update_interval),
@@ -108,13 +406,46 @@ class BatteryModule : Module {
                 formatter = { ctx.getString(R.string.battery_module_interval_formatter, it.toInt() / 1000) }
             )
 
+            // --- Battery Reset Options ---
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            var resetFull by remember { mutableStateOf(Prefs.getBool(ctx, "scr_reset_full", true)) }
+            SettingSwitch(
+                label = ctx.getString(R.string.reset_on_full_charge),
+                checked = resetFull,
+                onCheckedChange = {
+                    resetFull = it
+                    Prefs.setBool(ctx, "scr_reset_full", it)
+                }
+            )
+
+            var resetPlugged by remember { mutableStateOf(Prefs.getBool(ctx, "scr_reset_plugged", false)) }
+            SettingSwitch(
+                label = "Reset on Plugged",
+                checked = resetPlugged,
+                onCheckedChange = {
+                    resetPlugged = it
+                    Prefs.setBool(ctx, "scr_reset_plugged", it)
+                }
+            )
+
+            var resetBoot by remember { mutableStateOf(Prefs.getBool(ctx, "scr_reset_boot", true)) }
+            SettingSwitch(
+                label = ctx.getString(R.string.reset_on_reboot),
+                checked = resetBoot,
+                onCheckedChange = {
+                    resetBoot = it
+                    Prefs.setBool(ctx, "scr_reset_boot", it)
+                }
+            )
+
             if (sys.rootProvider != SystemAccess.RootProvider.NONE) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                var limitEn by remember { 
-                    mutableStateOf(Prefs.getBool(ctx, "bat_charge_limit_en", false)) 
+                var limitEn by remember {
+                    mutableStateOf(Prefs.getBool(ctx, "bat_charge_limit_en", false))
                 }
-                var limitVal by remember { 
-                    mutableStateOf(Prefs.getInt(ctx, "bat_charge_limit_val", 80).toFloat()) 
+                var limitVal by remember {
+                    mutableStateOf(Prefs.getInt(ctx, "bat_charge_limit_val", 80).toFloat())
                 }
 
                 Row(
@@ -208,7 +539,7 @@ class BatteryModule : Module {
                     formatter = { ctx.getString(R.string.battery_module_temp_formatter, it.toInt()) }
                 )
             }
-            
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
             var showDrain by remember { mutableStateOf(Prefs.getBool(ctx, "scr_show_drain", true)) }
@@ -242,6 +573,48 @@ class BatteryModule : Module {
                 formatter = { if (it == 0f) ctx.getString(R.string.battery_module_disabled) else ctx.getString(R.string.battery_module_time_limit_formatter, it.toInt()) }
             )
         }
+    }
+
+    private fun getTopAppBatteryUsage(context: Context): List<AppBatteryUsageInfo> {
+        val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return emptyList()
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
+        val startTime = calendar.timeInMillis
+
+        val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, now) ?: return emptyList()
+        var totalForegroundMs = 0L
+        val appTimeMap = mutableMapOf<String, Long>()
+
+        for (s in stats) {
+            if (s.totalTimeInForeground > 0 && s.packageName != context.packageName) {
+                appTimeMap[s.packageName] = (appTimeMap[s.packageName] ?: 0L) + s.totalTimeInForeground
+                totalForegroundMs += s.totalTimeInForeground
+            }
+        }
+
+        if (totalForegroundMs <= 0) return emptyList()
+
+        val pm = context.packageManager
+        val result = mutableListOf<AppBatteryUsageInfo>()
+
+        for ((pkg, timeMs) in appTimeMap) {
+            val pct = (timeMs.toFloat() / totalForegroundMs.toFloat()) * 35f
+            if (pct >= 0.1f) {
+                val label = try {
+                    val info = pm.getApplicationInfo(pkg, 0)
+                    pm.getApplicationLabel(info).toString()
+                } catch (_: Exception) {
+                    pkg.substringAfterLast('.')
+                }
+                result.add(AppBatteryUsageInfo(pkg, label, timeMs, pct))
+            }
+        }
+
+        return result.sortedByDescending { it.batteryPct }.take(10)
     }
 
     override fun priority(): Int = 10
@@ -303,7 +676,7 @@ class BatteryModule : Module {
             addAction(Intent.ACTION_SCREEN_ON)
         }
         ctx.registerReceiver(rcv, filter)
-        
+
         val sticky = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         sticky?.let { i ->
             level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
@@ -367,7 +740,6 @@ class BatteryModule : Module {
                         if (level >= limitVal && isCharging()) {
                             s.setChargingEnabled(false)
                         } else if (level < limitVal - 5 && !isCharging() && plugged > 0) {
-                            // Re-enable if dropped significantly below limit while plugged
                             s.setChargingEnabled(true)
                         }
                     }
@@ -418,10 +790,10 @@ class BatteryModule : Module {
             val totalOnDrain = onDrain + curDrain
             val onDrainStr = String.format(Locale.US, "%.1f", totalOnDrain)
             val offDrainStr = String.format(Locale.US, "%.1f", offDrain)
-            
+
             sb.append(c.getString(R.string.battery_module_screen_on_drain, onDrainStr))
             sb.append(c.getString(R.string.battery_module_screen_off_label, Fmt.duration(off), offDrainStr))
-            
+
             if (on > 60000) {
                 val rateOn = totalOnDrain / (on / 3600000f)
                 val rateStr = String.format(Locale.US, "%.1f", rateOn)
@@ -452,7 +824,7 @@ class BatteryModule : Module {
         val t = temp / 10f
 
         d["battery.level"] = "$level%"
-        
+
         if (isCharging()) {
             d["battery.charge_current"] = "$ma mA"
             d["battery.charger_type"] = pluggedType()
@@ -460,16 +832,16 @@ class BatteryModule : Module {
         } else {
             d["battery.discharge_rate"] = "$ma mA"
         }
-        
+
         d["battery.power"] = String.format(Locale.US, "%.1f W", w)
         d["battery.temp"] = Fmt.temp(t)
         d["battery.voltage"] = String.format(Locale.US, "%.2fV", voltage / 1000f)
-        
+
         val remMah = sys?.readRemainingCapacity(c) ?: -1
         if (remMah > 0) {
             d["battery.remaining_capacity"] = "$remMah mAh"
         }
-        
+
         d["battery.health"] = healthStr()
         d["battery.status"] = statusStr()
         d["battery.time_left"] = timeLeft()
@@ -493,7 +865,7 @@ class BatteryModule : Module {
 
         if (lowEnabled && level <= lowThresh && !lowFired && !isCharging()) {
             fireAlert(ctx, 2001, ctx.getString(R.string.battery_module_low_alert_title), ctx.getString(R.string.battery_module_low_alert_content, level))
-            vibrate(ctx, longArrayOf(0, 300, 100, 300)) // Warning double pulse
+            vibrate(ctx, longArrayOf(0, 300, 100, 300))
             Prefs.setBool(ctx, "bat_low_fired", true)
         }
         if (lowFired && level > lowThresh + 5) {
@@ -507,14 +879,13 @@ class BatteryModule : Module {
 
         if (tempEnabled && currentTemp >= tempThresh.toFloat() && !tempFired) {
             fireAlert(ctx, 2002, ctx.getString(R.string.battery_module_high_temp_alert_title), ctx.getString(R.string.battery_module_high_temp_alert_content, Fmt.temp(currentTemp)))
-            vibrate(ctx, longArrayOf(0, 500, 200, 500)) // Stronger warning pulse
+            vibrate(ctx, longArrayOf(0, 500, 200, 500))
             Prefs.setBool(ctx, "bat_temp_fired", true)
         }
         if (tempFired && currentTemp < tempThresh - 3) {
             Prefs.setBool(ctx, "bat_temp_fired", false)
         }
 
-        // Screen alerts
         val limitMin = Prefs.getInt(ctx, "scr_time_limit", 0)
         if (limitMin > 0) {
             val fired = Prefs.getBool(ctx, "scr_alert_fired", false)
@@ -527,7 +898,6 @@ class BatteryModule : Module {
             }
         }
 
-        // --- Smart Alert: Abnormal Discharge ---
         if (Prefs.getBool(ctx, "bat_smart_alerts", true) && !isCharging()) {
             val db = AppDatabase.getDatabase(ctx)
             val scope = CoroutineScope(Dispatchers.IO)
@@ -541,7 +911,7 @@ class BatteryModule : Module {
                     val lastFired = Prefs.getLong(ctx, "bat_abnormal_last_fired", 0L)
                     val now = System.currentTimeMillis()
 
-                    if (drop >= 5 && (now - lastFired) > 30 * 60 * 1000) { // 5% drop in 15 mins, fire once per 30 mins
+                    if (drop >= 5 && (now - lastFired) > 30 * 60 * 1000) {
                         fireAlert(ctx, 2003, ctx.getString(R.string.battery_module_abnormal_discharge_title), ctx.getString(R.string.battery_module_abnormal_discharge_content, drop))
                         Prefs.setLong(ctx, "bat_abnormal_last_fired", now)
                     }
@@ -555,27 +925,27 @@ class BatteryModule : Module {
     fun isFull(): Boolean = status == BatteryManager.BATTERY_STATUS_FULL || level >= 100
 
     fun isCharging(): Boolean = status == BatteryManager.BATTERY_STATUS_CHARGING
-    
+
     fun getCurrentMa(): Int = currentMa
-    
+
     fun getVoltage(): Int = voltage
-    
+
     fun getTemp(): Int = temp
-    
+
     fun getTimeLeft(): String = timeLeft()
-    
+
     fun getOnDrain(): Float = onDrain
-    
+
     fun getOffDrain(): Float = offDrain
-    
+
     fun getOnAccMs(): Long = onAccMs
-    
+
     fun getOffAccMs(): Long = offAccMs
-    
+
     fun getPeriodStartLevel(): Int = periodStartLevel
-    
+
     fun getPeriodStart(): Long = periodStart
-    
+
     fun isScreenOn(): Boolean = screenOn
 
     fun getTotalOn(): Long {
