@@ -134,6 +134,7 @@ fun MainApp() {
             com.extensionbox.app.ui.ModuleRegistry.nameFor(key)
         }
         currentDestination?.route == "speedtest" -> "Speed Test"
+        currentDestination?.route == "sensor_test" -> "Sensor Test"
         currentDestination?.route == "debloat" -> "Debloat Tools"
         currentDestination?.route == "privacy" -> "Privacy Dashboard"
         currentDestination?.route == Screen.About.route -> Screen.About.title
