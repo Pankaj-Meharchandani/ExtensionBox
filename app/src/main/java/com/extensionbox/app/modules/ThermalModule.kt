@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
@@ -186,132 +187,87 @@ class ThermalModule : Module {
         }
 
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- 1. Hero Thermal Gauges & Status Card ---
+            Text(
+                text = "Thermal & Temperatures Breakdown",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            // 3 Metric Cards Row (matching ScreenTimeModule)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Battery Temp",
+                    value = if (!batteryTempC.isNaN()) Fmt.temp(batteryTempC) else "N/A",
+                    color = if (!batteryTempC.isNaN() && batteryTempC >= 42f) Color(0xFFFF9100) else Color(0xFF00E676)
+                )
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "CPU / SoC",
+                    value = if (!cpuTempC.isNaN()) Fmt.temp(cpuTempC) else "N/A",
+                    color = if (!cpuTempC.isNaN() && cpuTempC >= 45f) Color(0xFFFF9100) else MaterialTheme.colorScheme.primary
+                )
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Peak Zone",
+                    value = if (maxTemp > 0f) Fmt.temp(maxTemp) else "N/A",
+                    color = statusColor
+                )
+            }
+
+            // Status Badge Banner
             Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(16.dp),
+                color = statusColor.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Status Badge Banner
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = statusColor.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "• ",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = statusColor
-                            )
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = statusColor
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-
-                    // Dual Gauge / Main Temperature Displays
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Battery Temp Gauge Box
-                        ThermalMetricBox(
-                            title = "Battery",
-                            temp = batteryTempC,
-                            subLabel = "Power Supply",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Spacer(Modifier.width(12.dp))
-
-                        // CPU Temp Gauge Box
-                        ThermalMetricBox(
-                            title = "CPU / SoC",
-                            temp = cpuTempC,
-                            subLabel = "Thermal Zone 0",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                    Spacer(Modifier.height(12.dp))
-
-                    // Quick Stat Box Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        ThermalStatBox(
-                            label = "Battery Temp",
-                            value = if (!batteryTempC.isNaN()) Fmt.temp(batteryTempC) else "N/A",
-                            subValue = if (!batteryTempC.isNaN() && batteryTempC < 42f) "Cool" else "Warm",
-                            color = if (!batteryTempC.isNaN() && batteryTempC >= 42f) Color(0xFFFF9100) else Color(0xFF00E676),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        ThermalStatBox(
-                            label = "CPU Temp",
-                            value = if (!cpuTempC.isNaN()) Fmt.temp(cpuTempC) else "N/A",
-                            subValue = if (!cpuTempC.isNaN() && cpuTempC < 45f) "Normal" else "Elevated",
-                            color = if (!cpuTempC.isNaN() && cpuTempC >= 45f) Color(0xFFFF9100) else Color(0xFF2979FF),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        ThermalStatBox(
-                            label = "Peak Zone",
-                            value = if (maxTemp > 0f) Fmt.temp(maxTemp) else "N/A",
-                            subValue = "${thermalZones.size} Sensors",
-                            color = statusColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "• ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = statusColor
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = statusColor
+                    )
                 }
             }
 
-            // --- 2. Thermal History Trend Chart Card ---
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Thermal History Trend",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Recorded temperature history over recent monitoring periods",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    if (historyPoints.size >= 2) {
+            // Thermal History Trend Chart Card
+            if (historyPoints.size >= 2) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Thermal History Trend",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(100.dp)
+                            modifier = Modifier.fillMaxWidth().height(90.dp)
                         ) {
                             Sparkline(
                                 points = historyPoints,
@@ -322,101 +278,66 @@ class ThermalModule : Module {
                                 animate = true
                             )
                         }
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Recording thermal samples...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             }
 
-            // --- 3. Hardware Thermal Zones List ---
+            // Hardware Thermal Zones List
             if (thermalZones.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = "Hardware Thermal Sensors (${thermalZones.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                val zoneList = remember(thermalZones) {
+                    thermalZones.entries.sortedByDescending { it.value }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    zoneList.take(14).forEach { (type, temp) ->
+                        val barColor = when {
+                            temp >= 48f -> Color(0xFFFF1744)
+                            temp >= 42f -> Color(0xFFFF9100)
+                            else -> MaterialTheme.colorScheme.primary
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column {
-                                Text(
-                                    text = "Kernel Thermal Sensors",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "${thermalZones.size} live hardware thermal zones detected",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(14.dp))
-
-                        val zoneList = remember(thermalZones) {
-                            thermalZones.entries.sortedByDescending { it.value }
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            zoneList.take(14).forEach { (type, temp) ->
-                                val barColor = when {
-                                    temp >= 48f -> Color(0xFFFF1744)
-                                    temp >= 42f -> Color(0xFFFF9100)
-                                    else -> MaterialTheme.colorScheme.primary
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                    modifier = Modifier.fillMaxWidth()
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = type,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Text(
-                                                text = Fmt.temp(temp),
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = barColor
-                                            )
-                                        }
-
-                                        Spacer(Modifier.height(6.dp))
-
-                                        LinearProgressIndicator(
-                                            progress = { (temp / 80f).coerceIn(0f, 1f) },
-                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                            color = barColor,
-                                            trackColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-                                        )
-                                    }
+                                    Text(
+                                        text = type,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = Fmt.temp(temp),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = barColor
+                                    )
                                 }
+
+                                Spacer(Modifier.height(6.dp))
+
+                                LinearProgressIndicator(
+                                    progress = { (temp / 80f).coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = barColor,
+                                    trackColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+                                )
                             }
                         }
                     }
@@ -426,90 +347,33 @@ class ThermalModule : Module {
     }
 
     @Composable
-    private fun ThermalMetricBox(
+    private fun MetricCard(
+        modifier: Modifier = Modifier,
         title: String,
-        temp: Float,
-        subLabel: String,
-        modifier: Modifier = Modifier
+        value: String,
+        color: Color
     ) {
-        val color = when {
-            temp.isNaN() -> MaterialTheme.colorScheme.onSurfaceVariant
-            temp >= 48f -> Color(0xFFFF1744)
-            temp >= 42f -> Color(0xFFFF9100)
-            else -> Color(0xFF00E676)
-        }
-
         Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = color.copy(alpha = 0.1f),
-            border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
-            modifier = modifier
+            modifier = modifier,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ) {
             Column(
-                modifier = Modifier.padding(14.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (!temp.isNaN()) Fmt.temp(temp) else "--",
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     color = color
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = subLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color.copy(alpha = 0.85f)
-                )
-            }
-        }
-    }
-
-    @Composable
-    private fun ThermalStatBox(
-        label: String,
-        value: String,
-        subValue: String,
-        color: Color,
-        modifier: Modifier = Modifier
-    ) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = color.copy(alpha = 0.12f),
-            border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
-            modifier = modifier
-        ) {
-            Column(
-                modifier = Modifier.padding(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = label,
+                    text = title,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
-                    maxLines = 1
-                )
-                Text(
-                    text = subValue,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color.copy(alpha = 0.85f),
-                    maxLines = 1
+                    textAlign = TextAlign.Center
                 )
             }
         }
