@@ -20,10 +20,10 @@ object ThemeHelper {
         ThemeOption(DEFAULT, "Default"),
         ThemeOption(MONET, "Material You"),
         ThemeOption(AMOLED, "OLED"),
-        ThemeOption(GRUVBOX, "Gruvbox"),
+        ThemeOption(GRUVBOX, "Cyberpunk"),
         ThemeOption(CATPPUCCIN, "Catppuccin"),
-        ThemeOption(NORD, "Nord"),
-        ThemeOption(SOLARIZED, "Solarized"),
+        ThemeOption(NORD, "Matrix"),
+        ThemeOption(SOLARIZED, "Sunset"),
         ThemeOption(DRACULA, "Dracula")
     )
 

@@ -48,15 +48,19 @@ private val DefaultLightColorScheme = lightColorScheme(
 )
 
 // Custom Schemes
-private val GruvboxColorScheme = darkColorScheme(
-    primary = Color(0xFFFABD2F),
-    secondary = Color(0xFF83A598),
-    tertiary = Color(0xFF8EC07C),
-    surface = Color(0xFF282828),
-    background = Color(0xFF1D2021),
-    onSurface = Color(0xFFEBDBB2),
-    onBackground = Color(0xFFEBDBB2),
-    surfaceVariant = Color(0xFF3C3836)
+private val CyberpunkColorScheme = darkColorScheme(
+    primary = Color(0xFFFF2DAA),
+    onPrimary = Color(0xFF2B001C),
+    secondary = Color(0xFF00E5FF),
+    onSecondary = Color(0xFF001F24),
+    tertiary = Color(0xFFFFE600),
+    onTertiary = Color(0xFF211E00),
+    surface = Color(0xFF20113D),
+    background = Color(0xFF10061F),
+    onSurface = Color(0xFFF7EFFF),
+    onBackground = Color(0xFFF7EFFF),
+    surfaceVariant = Color(0xFF321B58),
+    outline = Color(0xFFB66DFF)
 )
 
 private val CatppuccinColorScheme = darkColorScheme(
@@ -70,15 +74,19 @@ private val CatppuccinColorScheme = darkColorScheme(
     surfaceVariant = Color(0xFF313244)
 )
 
-private val NordColorScheme = darkColorScheme(
-    primary = Color(0xFF88C0D0),
-    secondary = Color(0xFF81A1C1),
-    tertiary = Color(0xFF8FBCBB),
-    surface = Color(0xFF3B4252),
-    background = Color(0xFF2E3440),
-    onSurface = Color(0xFFECEFF4),
-    onBackground = Color(0xFFECEFF4),
-    surfaceVariant = Color(0xFF4C566A)
+private val MatrixColorScheme = darkColorScheme(
+    primary = Color(0xFF00FF66),
+    onPrimary = Color(0xFF003918),
+    secondary = Color(0xFFB7FF00),
+    onSecondary = Color(0xFF1C2800),
+    tertiary = Color(0xFF00D9FF),
+    onTertiary = Color(0xFF003640),
+    surface = Color(0xFF092218),
+    background = Color(0xFF020B07),
+    onSurface = Color(0xFFD8FFE5),
+    onBackground = Color(0xFFD8FFE5),
+    surfaceVariant = Color(0xFF103D29),
+    outline = Color(0xFF38D980)
 )
 
 private val AmoledOverrides = darkColorScheme(
@@ -90,15 +98,19 @@ private val AmoledOverrides = darkColorScheme(
     surfaceVariant = Color(0xFF121212)
 )
 
-private val SolarizedColorScheme = darkColorScheme(
-    primary = Color(0xFF268BD2),
-    secondary = Color(0xFF2AA198),
-    tertiary = Color(0xFF859900),
-    surface = Color(0xFF073642),
-    background = Color(0xFF002B36),
-    onSurface = Color(0xFF93A1A1),
-    onBackground = Color(0xFF93A1A1),
-    surfaceVariant = Color(0xFF586E75)
+private val SunsetColorScheme = darkColorScheme(
+    primary = Color(0xFFFF7657),
+    onPrimary = Color(0xFF3D0900),
+    secondary = Color(0xFFFFB000),
+    onSecondary = Color(0xFF382300),
+    tertiary = Color(0xFFFF4D9D),
+    onTertiary = Color(0xFF41001E),
+    surface = Color(0xFF3A1725),
+    background = Color(0xFF1D0A16),
+    onSurface = Color(0xFFFFEAE3),
+    onBackground = Color(0xFFFFEAE3),
+    surfaceVariant = Color(0xFF562238),
+    outline = Color(0xFFFF9A83)
 )
 
 private val DraculaColorScheme = darkColorScheme(
@@ -150,9 +162,9 @@ fun ExtensionBoxTheme(
                 if (darkTheme) DarkColorScheme else LightColorScheme
             }
         }
-        ThemeHelper.GRUVBOX -> GruvboxColorScheme
+        ThemeHelper.GRUVBOX -> CyberpunkColorScheme
         ThemeHelper.CATPPUCCIN -> CatppuccinColorScheme
-        ThemeHelper.NORD -> NordColorScheme
+        ThemeHelper.NORD -> MatrixColorScheme
         ThemeHelper.AMOLED -> {
             val base = if (isDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 dynamicDarkColorScheme(context)
@@ -170,7 +182,7 @@ fun ExtensionBoxTheme(
                 tertiary = AmoledOverrides.tertiary
             )
         }
-        ThemeHelper.SOLARIZED -> SolarizedColorScheme
+        ThemeHelper.SOLARIZED -> SunsetColorScheme
         ThemeHelper.DRACULA -> DraculaColorScheme
         else -> if (darkTheme) DarkColorScheme else LightColorScheme
     }
