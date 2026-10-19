@@ -319,7 +319,7 @@ fun SettingsScreen(
 
             SettingsItemRow(
                 title = stringResource(id = R.string.app_theme),
-                summary = ThemeHelper.NAMES[themeIndex.coerceIn(0, ThemeHelper.NAMES.size - 1)],
+                summary = ThemeHelper.nameForId(themeIndex),
                 icon = Icons.Default.ColorLens,
                 iconColor = Color(0xFFAB47BC),
                 onClick = { showThemeDialog = true }
@@ -329,10 +329,9 @@ fun SettingsScreen(
                 SingleOptionSelectionDialog(
                     title = stringResource(id = R.string.app_theme),
                     options = ThemeHelper.NAMES.toList(),
-                    selectedOption = ThemeHelper.NAMES[themeIndex.coerceIn(0, ThemeHelper.NAMES.size - 1)],
+                    selectedOption = ThemeHelper.nameForId(themeIndex),
                     onOptionSelected = { selectedName ->
-                        val idx = ThemeHelper.NAMES.indexOf(selectedName)
-                        if (idx >= 0) viewModel.updateTheme(idx)
+                        viewModel.updateTheme(ThemeHelper.idForName(selectedName))
                     },
                     onDismissRequest = { showThemeDialog = false }
                 )

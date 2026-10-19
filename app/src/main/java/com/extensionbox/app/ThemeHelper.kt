@@ -12,16 +12,26 @@ object ThemeHelper {
     const val DRACULA = 6
     const val DEFAULT = 7
 
-    val NAMES = arrayOf(
-        "Material You (Monet)",
-        "Gruvbox Dark",
-        "Catppuccin Mocha",
-        "Nord",
-        "AMOLED",
-        "Solarized Dark",
-        "Dracula",
-        "Default"
+    data class ThemeOption(val id: Int, val name: String)
+
+    // Display order is intentionally independent from the persisted IDs so existing
+    // users do not have their selected theme changed by a picker reorder.
+    val OPTIONS = listOf(
+        ThemeOption(DEFAULT, "Default"),
+        ThemeOption(MONET, "Material You"),
+        ThemeOption(AMOLED, "OLED"),
+        ThemeOption(GRUVBOX, "Gruvbox"),
+        ThemeOption(CATPPUCCIN, "Catppuccin"),
+        ThemeOption(NORD, "Nord"),
+        ThemeOption(SOLARIZED, "Solarized"),
+        ThemeOption(DRACULA, "Dracula")
     )
+
+    val NAMES = OPTIONS.map { it.name }.toTypedArray()
+
+    fun nameForId(id: Int): String = OPTIONS.firstOrNull { it.id == id }?.name ?: "Default"
+
+    fun idForName(name: String): Int = OPTIONS.firstOrNull { it.name == name }?.id ?: DEFAULT
 
     fun apply(activity: Activity) {
         val theme = Prefs.getInt(activity, "app_theme", DEFAULT)
