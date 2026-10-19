@@ -13,7 +13,7 @@ import android.content.pm.PackageManager
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val context = application.applicationContext
 
-    private val _themeIndex = MutableStateFlow(Prefs.getInt(context, "app_theme", ThemeHelper.MONET))
+    private val _themeIndex = MutableStateFlow(Prefs.getInt(context, "app_theme", ThemeHelper.DEFAULT))
     val themeIndex: StateFlow<Int> = _themeIndex.asStateFlow()
 
     private val _isShizukuRunning = MutableStateFlow(try { Shizuku.pingBinder() } catch (e: Exception) { false })

@@ -33,6 +33,20 @@ private val LightColorScheme = lightColorScheme(
     tertiary = Pink40
 )
 
+private val DefaultLightColorScheme = lightColorScheme(
+    primary = Color(0xFF3F51B5),
+    onPrimary = Color.White,
+    secondary = Color(0xFF455A64),
+    onSecondary = Color.White,
+    tertiary = Color(0xFF00695C),
+    background = Color.White,
+    surface = Color.White,
+    surfaceVariant = Color(0xFFF3F3F3),
+    onBackground = Color(0xFF171717),
+    onSurface = Color(0xFF171717),
+    onSurfaceVariant = Color(0xFF4A4A4A)
+)
+
 // Custom Schemes
 private val GruvboxColorScheme = darkColorScheme(
     primary = Color(0xFFFABD2F),
@@ -105,11 +119,30 @@ fun ExtensionBoxTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    val initialTheme = remember { Prefs.getInt(context, "app_theme", ThemeHelper.MONET) }
-    val themeIndex by Prefs.getIntFlow(context, "app_theme", ThemeHelper.MONET).collectAsState(initial = initialTheme)
+    val initialTheme = remember { Prefs.getInt(context, "app_theme", ThemeHelper.DEFAULT) }
+    val themeIndex by Prefs.getIntFlow(context, "app_theme", ThemeHelper.DEFAULT).collectAsState(initial = initialTheme)
     val isDynamic by Prefs.getBoolFlow(context, "dynamic_color", true).collectAsState(initial = true)
 
     val colorScheme = when (themeIndex) {
+        ThemeHelper.DEFAULT -> {
+            if (darkTheme) {
+                val base = if (isDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    dynamicDarkColorScheme(context)
+                } else {
+                    DarkColorScheme
+                }
+                base.copy(
+                    surface = AmoledOverrides.surface,
+                    background = AmoledOverrides.background,
+                    surfaceVariant = AmoledOverrides.surfaceVariant,
+                    onSurface = AmoledOverrides.onSurface,
+                    onBackground = AmoledOverrides.onBackground,
+                    tertiary = AmoledOverrides.tertiary
+                )
+            } else {
+                DefaultLightColorScheme
+            }
+        }
         ThemeHelper.MONET -> {
             if (isDynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

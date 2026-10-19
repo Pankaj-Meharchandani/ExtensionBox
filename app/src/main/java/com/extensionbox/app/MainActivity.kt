@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
         Shizuku.addRequestPermissionResultListener(REQUEST_PERMISSION_RESULT_LISTENER)
 
         setContent {
-            val themeIndex by Prefs.getIntFlow(this, "app_theme", ThemeHelper.MONET).collectAsState(initial = ThemeHelper.MONET)
+            val themeIndex by Prefs.getIntFlow(this, "app_theme", ThemeHelper.DEFAULT).collectAsState(initial = ThemeHelper.DEFAULT)
             val onboardingCompleted by Prefs.getBoolFlow(this, "onboarding_completed", false).collectAsState(initial = null)
             
             // Re-apply activity theme when index changes (for window background etc)

@@ -366,7 +366,7 @@ fun SettingsScreen(
             }
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                (themeIndex == ThemeHelper.MONET || themeIndex == ThemeHelper.AMOLED)) {
+                (themeIndex == ThemeHelper.MONET || themeIndex == ThemeHelper.AMOLED || themeIndex == ThemeHelper.DEFAULT)) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
                 var dynamicColor by remember { mutableStateOf(Prefs.getBool(context, "dynamic_color", true)) }

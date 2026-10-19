@@ -10,6 +10,7 @@ object ThemeHelper {
     const val AMOLED = 4
     const val SOLARIZED = 5
     const val DRACULA = 6
+    const val DEFAULT = 7
 
     val NAMES = arrayOf(
         "Material You (Monet)",
@@ -18,11 +19,12 @@ object ThemeHelper {
         "Nord",
         "AMOLED",
         "Solarized Dark",
-        "Dracula"
+        "Dracula",
+        "Default"
     )
 
     fun apply(activity: Activity) {
-        val theme = Prefs.getInt(activity, "app_theme", MONET)
+        val theme = Prefs.getInt(activity, "app_theme", DEFAULT)
         val resId = when (theme) {
             GRUVBOX -> R.style.AppTheme_Gruvbox
             CATPPUCCIN -> R.style.AppTheme_Catppuccin
