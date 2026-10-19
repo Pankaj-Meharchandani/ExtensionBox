@@ -27,6 +27,8 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.extensionbox.app.ui.components.AppScaffold
+import com.extensionbox.app.ui.components.UpdateAvailableDialog
+import com.extensionbox.app.ui.components.openReleasePage
 import com.extensionbox.app.ui.screens.*
 import com.extensionbox.app.ui.theme.ExtensionBoxTheme
 import rikka.shizuku.Shizuku
@@ -116,6 +118,28 @@ sealed class Screen(val route: String, val title: String, val selectedIcon: Imag
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApp() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var availableUpdate by remember { mutableStateOf<UpdateRelease?>(null) }
+    var updateDismissed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val latest = UpdateReleaseChecker.check(BuildConfig.VERSION_NAME)
+        if (latest != null) availableUpdate = latest
+    }
+
+    availableUpdate?.takeUnless { updateDismissed }?.let { release ->
+        UpdateAvailableDialog(
+            release = release,
+            onLater = {
+                updateDismissed = true
+            },
+            onUpdate = {
+                updateDismissed = true
+                openReleasePage(context, release.pageUrl)
+            }
+        )
+    }
+
     val navController = rememberNavController()
     val screens = listOf(Screen.Dashboard, Screen.Extensions, Screen.Tools, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
