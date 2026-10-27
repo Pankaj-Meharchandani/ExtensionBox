@@ -4,9 +4,6 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
-def ks = System.getenv("KEYSTORE_PATH")
-def hasSigning = ks != null && !ks.isEmpty()
-
 android {
     namespace 'com.extensionbox.app'
     compileSdk 36
@@ -24,22 +21,10 @@ android {
         }
     }
 
-    signingConfigs {
-        release {
-            if (hasSigning) {
-                storeFile rootProject.file(System.getenv("KEYSTORE_PATH"))
-                storePassword System.getenv("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
-            }
-        }
-    }
-
     buildTypes {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (hasSigning) signingConfig signingConfigs.release
         }
     }
 
